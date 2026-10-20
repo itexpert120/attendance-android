@@ -40,10 +40,11 @@ private val JSON_TYPES = arrayOf("application/json", "text/json", "text/plain", 
 
 /**
  * Wires the three actions to SAF pickers and [BackupViewModel]. Results are reported on [snackbarHostState].
- * Besides returning the actions this emits the backup dialog/sheets, which float above the screen.
+ * Besides returning the actions this emits the backup dialog/sheets, which float above the screen. [emptyApp] is
+ * for first-run setup, where a restore or import replaces nothing, so the sheets drop their warnings.
  */
 @Composable
-internal fun rememberBackupActions(snackbarHostState: SnackbarHostState): BackupActions {
+internal fun rememberBackupActions(snackbarHostState: SnackbarHostState, emptyApp: Boolean = false): BackupActions {
     val container = LocalAppContainer.current
     val resolver = LocalContext.current.applicationContext.contentResolver
     val haptics = LocalHapticFeedback.current
@@ -83,6 +84,7 @@ internal fun rememberBackupActions(snackbarHostState: SnackbarHostState): Backup
         onConfirmRestore = viewModel::confirmRestore,
         onConfirmWebImport = viewModel::confirmWebImport,
         onDismiss = viewModel::dismiss,
+        emptyApp = emptyApp,
     )
 
     return remember(viewModel, createBackup, openBackup, openWebBackup) {

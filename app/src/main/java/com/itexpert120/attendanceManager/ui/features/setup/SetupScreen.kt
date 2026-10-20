@@ -35,7 +35,9 @@ import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Payments
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PhotoCamera
@@ -76,6 +78,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.itexpert120.attendanceManager.LocalAppContainer
+import com.itexpert120.attendanceManager.ui.features.settings.rememberBackupActions
 import com.itexpert120.attendanceManager.data.files.PickedPhoto
 import com.itexpert120.attendanceManager.domain.monthName
 import com.itexpert120.attendanceManager.ui.components.BottomActionBar
@@ -104,6 +107,10 @@ internal class SetupCallbacks(
     val onBack: () -> Unit = {},
     val onEdit: (SetupStep) -> Unit = {},
     val onFinish: () -> Unit = {},
+    /** Import an old web-app `.json` backup instead of setting up from scratch. */
+    val onImportWebBackup: () -> Unit = {},
+    /** Restore this app's own `.zip` backup, for example on a new phone. */
+    val onRestoreBackup: () -> Unit = {},
 )
 
 /**
@@ -117,6 +124,8 @@ fun SetupScreen() {
     val form by viewModel.form.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    // Importing or restoring writes the school settings, so the app leaves setup by itself afterwards.
+    val backup = rememberBackupActions(snackbarHostState, emptyApp = true)
     val photos = rememberPhotoPicker(
         keepTransparency = true,
         onError = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
@@ -141,6 +150,8 @@ fun SetupScreen() {
             onBack = viewModel::back,
             onEdit = viewModel::goTo,
             onFinish = viewModel::finish,
+            onImportWebBackup = backup.importWebBackup,
+            onRestoreBackup = backup.restore,
         ),
     )
 }
@@ -182,7 +193,7 @@ internal fun SetupContent(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         when (step) {
-                            SetupStep.WELCOME -> WelcomePage()
+                            SetupStep.WELCOME -> WelcomePage(callbacks)
                             SetupStep.SCHOOL -> SchoolPage(form, callbacks, logoBusy)
                             SetupStep.CLASS -> ClassPage(form, callbacks)
                             SetupStep.PREFERENCES -> PreferencesPage(form, callbacks)
@@ -274,7 +285,7 @@ private fun PageHeader(title: String, text: String) {
 // region Pages
 
 @Composable
-private fun WelcomePage() {
+private fun WelcomePage(callbacks: SetupCallbacks) {
     val colors = MaterialTheme.colorScheme
     Spacer(Modifier.height(16.dp))
     Box(
@@ -299,6 +310,26 @@ private fun WelcomePage() {
         item { ListRow(label = "Works offline", detail = "No internet needed", icon = Icons.Rounded.CloudOff) }
         item { ListRow(label = "Stored on this phone", detail = "Every register stays local", icon = Icons.Rounded.PhoneAndroid) }
         item { ListRow(label = "No accounts", detail = "Nothing is uploaded or shared", icon = Icons.Rounded.Lock) }
+    }
+    ListGroup(header = "Already have your data?") {
+        item {
+            ListRow(
+                label = "Import from the web app",
+                detail = "Pick the .json backup saved by the old web app",
+                icon = Icons.Rounded.Language,
+                chevron = true,
+                onClick = callbacks.onImportWebBackup,
+            )
+        }
+        item {
+            ListRow(
+                label = "Restore a backup",
+                detail = "A .zip backup from this app, e.g. from your old phone",
+                icon = Icons.Rounded.Restore,
+                chevron = true,
+                onClick = callbacks.onRestoreBackup,
+            )
+        }
     }
 }
 

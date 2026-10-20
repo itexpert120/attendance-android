@@ -37,12 +37,13 @@ internal fun BackupPhaseUi(
     onConfirmRestore: () -> Unit,
     onConfirmWebImport: () -> Unit,
     onDismiss: () -> Unit,
+    emptyApp: Boolean = false,
 ) {
     when (phase) {
         BackupPhase.Idle -> Unit
         is BackupPhase.Working -> BackupProgressDialog(phase.message)
-        is BackupPhase.ConfirmRestore -> RestoreConfirmSheet(phase.summary, onConfirmRestore, onDismiss)
-        is BackupPhase.ConfirmWebImport -> WebImportConfirmSheet(phase.summary, onConfirmWebImport, onDismiss)
+        is BackupPhase.ConfirmRestore -> RestoreConfirmSheet(phase.summary, emptyApp, onConfirmRestore, onDismiss)
+        is BackupPhase.ConfirmWebImport -> WebImportConfirmSheet(phase.summary, emptyApp, onConfirmWebImport, onDismiss)
     }
 }
 
@@ -71,7 +72,7 @@ private fun BackupProgressDialog(message: String) {
 }
 
 @Composable
-private fun RestoreConfirmSheet(summary: AppBackupSummary, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun RestoreConfirmSheet(summary: AppBackupSummary, emptyApp: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     val made = summary.createdAt.toLocalDateTime(TimeZone.currentSystemDefault()).date
     AppSheet(
         title = "Restore this backup?",
@@ -79,10 +80,11 @@ private fun RestoreConfirmSheet(summary: AppBackupSummary, onConfirm: () -> Unit
         description = "Backup from ${longDateLabel(made)}",
         footer = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
-            DestructiveButton("Replace all data", onConfirm)
+            ConfirmButton(emptyApp, "Restore", onConfirm)
         },
     ) {
-        ErrorBanner("This replaces all data on this phone with the backup. What is on the phone now will be lost.")
+        // During first-run setup there is nothing on the phone to lose, so there is no warning.
+        if (!emptyApp) ErrorBanner("This replaces all data on this phone with the backup. What is on the phone now will be lost.")
         val counts = summary.counts
         SummaryFacts(
             buildList {
@@ -99,17 +101,17 @@ private fun RestoreConfirmSheet(summary: AppBackupSummary, onConfirm: () -> Unit
 }
 
 @Composable
-private fun WebImportConfirmSheet(summary: BackupSummary, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun WebImportConfirmSheet(summary: BackupSummary, emptyApp: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AppSheet(
         title = "Import web app backup?",
         onDismiss = onDismiss,
         description = summary.schoolName,
         footer = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
-            DestructiveButton("Replace all data", onConfirm)
+            ConfirmButton(emptyApp, "Import", onConfirm)
         },
     ) {
-        ErrorBanner("This replaces all data on this phone with the web app backup. What is on the phone now will be lost.")
+        if (!emptyApp) ErrorBanner("This replaces all data on this phone with the web app backup. What is on the phone now will be lost.")
         val counts = summary.counts
         SummaryFacts(
             listOf(
@@ -180,3 +182,9 @@ private fun DestructiveButton(label: String, onClick: () -> Unit) {
 }
 
 private const val MAX_WARNINGS = 5
+
+/** "Replace all data" (destructive) over existing data; a plain "Restore" / "Import" on an empty app. */
+@Composable
+private fun ConfirmButton(emptyApp: Boolean, emptyLabel: String, onConfirm: () -> Unit) {
+    if (emptyApp) Button(onClick = onConfirm) { Text(emptyLabel) } else DestructiveButton("Replace all data", onConfirm)
+}
