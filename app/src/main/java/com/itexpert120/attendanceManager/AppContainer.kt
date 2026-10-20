@@ -2,6 +2,8 @@ package com.itexpert120.attendanceManager
 
 import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.itexpert120.attendanceManager.data.backup.auto.AutoBackupPreferences
+import com.itexpert120.attendanceManager.data.backup.auto.AutoBackupScheduler
 import com.itexpert120.attendanceManager.data.db.AttendanceDatabase
 import com.itexpert120.attendanceManager.data.files.AndroidPhoneNormalizer
 import com.itexpert120.attendanceManager.data.files.FilePhotoStore
@@ -45,6 +47,9 @@ class AppContainer(context: Context) {
     val tests: TestRepository by lazy { TestRepository(database) }
     val homework: HomeworkRepository by lazy { HomeworkRepository(database, photoStore) }
 
+    val autoBackupPreferences: AutoBackupPreferences by lazy { AutoBackupPreferences(appContext) }
+    val autoBackupScheduler: AutoBackupScheduler by lazy { AutoBackupScheduler(appContext) }
+
     /** Called once from [AttendanceApplication.onCreate]; keeps the slow first-use work off the main thread. */
     fun startup() {
         applicationScope.launch(Dispatchers.IO) {
@@ -52,6 +57,8 @@ class AppContainer(context: Context) {
             (phoneNormalizer as? AndroidPhoneNormalizer)?.warmUp()
             // Older data may hold phone numbers in a non-canonical format (the PWA did the same on load).
             runCatching { students.migratePhoneNumbers() }
+            // Automatic backups are on unless the user turned them off; KEEP leaves an existing schedule alone.
+            runCatching { autoBackupScheduler.apply(autoBackupPreferences.enabled) }
         }
     }
 }

@@ -64,6 +64,7 @@ dependencies {
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation(libs.androidx.work.runtime.ktx)
 
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.serialization.json)
