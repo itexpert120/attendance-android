@@ -42,9 +42,10 @@ fun StudentDetailSheet(
     row: EnrollmentRow,
     phoneDisplay: String,
     onContact: (ContactAction) -> Unit,
-    onEdit: () -> Unit,
-    onStrikeOff: () -> Unit,
-    onRestore: () -> Unit,
+    /** Null when opened read-only (for example from the attendance register): no Edit or roll actions. */
+    onEdit: (() -> Unit)?,
+    onStrikeOff: (() -> Unit)?,
+    onRestore: (() -> Unit)?,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -60,13 +61,17 @@ fun StudentDetailSheet(
         modifier = modifier,
         footer = {
             if (struckOff == null) {
-                TextButton(onClick = onStrikeOff) { Text("Strike off", color = MaterialTheme.colorScheme.error) }
-            } else {
+                if (onStrikeOff != null) {
+                    TextButton(onClick = onStrikeOff) { Text("Strike off", color = MaterialTheme.colorScheme.error) }
+                }
+            } else if (onRestore != null) {
                 TextButton(onClick = onRestore) { Text("Put back on roll") }
             }
-            Button(onClick = onEdit) {
-                Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text("Edit")
+            if (onEdit != null) {
+                Button(onClick = onEdit) {
+                    Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text("Edit")
+                }
             }
         },
     ) {
@@ -118,7 +123,7 @@ fun StudentDetailSheet(
                         label = "No phone number saved",
                         detail = "Add one to call or message the parent",
                         icon = Icons.Rounded.Call,
-                        chevron = true,
+                        chevron = onEdit != null,
                         onClick = onEdit,
                     )
                 }
