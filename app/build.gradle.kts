@@ -16,14 +16,29 @@ android {
         applicationId = "com.itexpert120.attendanceManager"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Release signing comes from ~/.gradle/gradle.properties so the keystore and its passwords never enter
+    // the repository. Without them, release builds are left unsigned.
+    val releaseStoreFile = providers.gradleProperty("ATTENDANCE_RELEASE_STORE_FILE").orNull
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = providers.gradleProperty("ATTENDANCE_RELEASE_STORE_PASSWORD").get()
+                keyAlias = providers.gradleProperty("ATTENDANCE_RELEASE_KEY_ALIAS").get()
+                keyPassword = providers.gradleProperty("ATTENDANCE_RELEASE_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseStoreFile != null) signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = false
             }
