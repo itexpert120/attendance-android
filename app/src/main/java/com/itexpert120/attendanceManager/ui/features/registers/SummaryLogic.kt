@@ -4,14 +4,13 @@ import com.itexpert120.attendanceManager.data.repo.RegisterData
 
 /**
  * The attendance figures of the monthly summary, already formatted the way the PWA's Summary tab shows them
- * (attendance in days, where an odd session is ".5"; the average to two decimals).
+ * (attendance in days; the average to two decimals).
  */
 data class SummaryFigures(
-    /** Present sessions this month across all students, struck-off included. */
+    /** Present days this month across all students, struck-off included. */
     val monthAttendanceDays: String,
     val averageAttendance: String,
-    /** Non-holiday days times two. */
-    val workingTimings: Int,
+    /** Days that are neither weekends nor declared holidays. */
     val workingDays: String,
     val broughtForwardDays: String,
     /** Brought forward plus this month. */
@@ -29,8 +28,7 @@ fun summaryFigures(data: RegisterData): SummaryFigures {
     return SummaryFigures(
         monthAttendanceDays = summaryDaysLabel(month),
         averageAttendance = summaryAverageLabel(data.averageAttendance),
-        workingTimings = data.workingTimings,
-        workingDays = summaryDaysLabel(data.workingTimings),
+        workingDays = summaryDaysLabel(data.workingDays),
         broughtForwardDays = summaryDaysLabel(broughtForward),
         academicYearDays = summaryDaysLabel(month + broughtForward),
         beginning = movement.beginning,

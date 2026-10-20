@@ -53,20 +53,20 @@ class RegisterDataTest {
         val data = data(
             marks = listOf(
                 mark(1, 1, 3, Session.FIRST, PRESENT),
-                mark(1, 1, 3, Session.SECOND, ABSENT),
+                mark(1, 1, 4, Session.FIRST, ABSENT),
                 mark(1, 2, 3, Session.FIRST, PRESENT),
             ),
         )
 
-        assertEquals(PRESENT, data.statusOf(1, 3, Session.FIRST))
-        assertEquals(ABSENT, data.statusOf(1, 3, Session.SECOND))
-        assertNull(data.statusOf(1, 4, Session.FIRST))
+        assertEquals(PRESENT, data.statusOf(1, 3))
+        assertEquals(ABSENT, data.statusOf(1, 4))
+        assertNull(data.statusOf(1, 5))
         assertEquals(2, data.monthPresentSessions)
         assertEquals(1, data.visiblePresentTotal)
-        assertEquals(1, data.presentOn(3, Session.FIRST))
-        assertEquals(0, data.presentOn(3, Session.SECOND))
+        assertEquals(1, data.presentOn(3))
+        assertEquals(0, data.presentOn(4))
         assertTrue(data.hasMarksOn(3))
-        assertFalse(data.hasMarksOn(4))
+        assertFalse(data.hasMarksOn(5))
     }
 
     @Test
@@ -78,15 +78,15 @@ class RegisterDataTest {
         assertFalse(data.isHoliday(11))
         assertEquals("Closed", data.holidayTitle(10))
         assertNull(data.holidayTitle(8))
-        // 21 weekdays minus the declared Monday, two timings each.
-        assertEquals(40, data.workingTimings)
+        // 21 weekdays minus the declared Monday.
+        assertEquals(20, data.workingDays)
     }
 
     @Test
-    fun `average attendance is present sessions per working timing`() {
+    fun `average attendance is present days per working day`() {
         val data = data(marks = (1..4).map { mark(1, 1, it + 2, Session.FIRST, PRESENT) })
 
-        assertEquals(4.0 / 42, data.averageAttendance, 1e-9)
+        assertEquals(4.0 / 21, data.averageAttendance, 1e-9)
     }
 
     @Test

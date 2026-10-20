@@ -228,10 +228,12 @@ class PwaBackupMapperTest {
         assertEquals(1, mapped.registers.size)
         assertEquals(2026, mapped.registers[0].year)
         assertEquals(8, mapped.registers[0].month)
-        assertEquals(3, mapped.attendance.size)
-        val second = mapped.attendance.first { it.enrollmentId == 1L && it.session == Session.SECOND }
-        assertEquals(AttendanceStatus.ABSENT, second.status)
-        assertEquals(3, second.day)
+        // Two timings merge into one mark per day: e1's P + A becomes P.
+        assertEquals(2, mapped.attendance.size)
+        assertTrue(mapped.attendance.all { it.session == Session.FIRST })
+        val merged = mapped.attendance.single { it.enrollmentId == 1L }
+        assertEquals(AttendanceStatus.PRESENT, merged.status)
+        assertEquals(3, merged.day)
         assertEquals(AttendanceStatus.LEAVE, mapped.attendance.first { it.enrollmentId == 2L }.status)
         assertEquals("Independence Day", mapped.holidays.single().title)
 
@@ -282,7 +284,7 @@ class PwaBackupMapperTest {
 
         // counts
         assertEquals(1, mapped.counts["settings"])
-        assertEquals(3, mapped.counts["attendance"])
+        assertEquals(2, mapped.counts["attendance"])
         assertEquals(2, mapped.counts["testRoster"])
         assertEquals(1, mapped.counts["testResults"])
         assertEquals(2, mapped.counts["homeworkReports"])
@@ -309,7 +311,7 @@ class PwaBackupMapperTest {
         assertTrue(mapped.rosterEntries.isEmpty())
         assertTrue(mapped.homeworkReports.isEmpty())
         assertEquals(3, mapped.students.size)
-        assertEquals(3, mapped.attendance.size)
+        assertEquals(2, mapped.attendance.size)
         assertTrue(mapped.warnings.toString(), mapped.warnings.isEmpty())
     }
 
@@ -427,7 +429,7 @@ class PwaBackupMapperTest {
     }
 
     @Test
-    fun `students with the same admission number are both kept and the later one is renamed`() = runTest {
+    fun `students with the same B-Form number are both kept and the later one is renamed`() = runTest {
         val tables = fullTables()
         tables["students"] = tables.getValue("students") + obj(
             "id" to "s4", "admissionNumber" to "a-001", "name" to "Dania", "phone" to "", "createdAt" to "2026-08-03T00:00:00Z",
@@ -439,7 +441,7 @@ class PwaBackupMapperTest {
         assertEquals("a-001 (2)", mapped.students[3].admissionNumber)
         assertEquals(4L, mapped.ids.students["s4"])
         assertEquals(4, mapped.students.map { it.admissionNumber.lowercase() }.toSet().size)
-        assertWarning(mapped, "students", "admission number", "Dania")
+        assertWarning(mapped, "students", "B-Form number", "Dania")
     }
 
     @Test
@@ -459,7 +461,7 @@ class PwaBackupMapperTest {
         assertEquals(mapped.ids.classGroups["c1"], mapped.ids.classGroups["c1b"])
         assertEquals(1, mapped.registers.size)
         assertEquals(mapped.ids.registers["r1"], mapped.ids.registers["r1b"])
-        assertEquals(4, mapped.attendance.size)
+        assertEquals(3, mapped.attendance.size)
         assertEquals(AttendanceStatus.PRESENT, mapped.attendance.first { it.enrollmentId == 1L && it.day == 3 && it.session == Session.FIRST }.status)
         assertEquals(2, mapped.subjects.size)
         assertEquals(mapped.ids.subjects["sub1"], mapped.ids.subjects["sub1b"])
@@ -494,7 +496,7 @@ class PwaBackupMapperTest {
         // e9 orphan skipped; e10 kept with a repaired admission date (the day its student was created)
         assertEquals(4, mapped.enrollments.size)
         assertEquals(LocalDate(2026, 8, 1), mapped.enrollments.last().admittedOn)
-        assertEquals(4, mapped.attendance.size) // the 3 originals + day 31
+        assertEquals(3, mapped.attendance.size) // the 2 merged originals + day 31
         assertWarning(mapped, "enrollments", "missing from the backup")
         assertWarning(mapped, "enrollments", "admission date")
         assertWarning(mapped, "attendance", "register or enrollment is missing")

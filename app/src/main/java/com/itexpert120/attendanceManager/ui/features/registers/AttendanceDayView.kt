@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -75,7 +76,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.itexpert120.attendanceManager.model.AttendanceStatus
-import com.itexpert120.attendanceManager.model.Session
 import com.itexpert120.attendanceManager.domain.longDateLabel
 import com.itexpert120.attendanceManager.ui.components.StoredPhoto
 import com.itexpert120.attendanceManager.ui.theme.AttendanceColors
@@ -244,9 +244,11 @@ private fun DayNotice(info: DayInfo, text: String, onRemoveHoliday: () -> Unit) 
 
 /** Everything a row can ask the screen to do. One instance per selected day keeps rows from recomposing. */
 internal class AttendanceRowActions(
-    val onSetMark: (enrollmentId: Long, session: Session, status: AttendanceStatus?) -> Unit,
+    val onSetMark: (enrollmentId: Long, status: AttendanceStatus?) -> Unit,
     val onSwipeAbsent: (enrollmentId: Long, name: String) -> Unit,
     val onBlocked: (message: String) -> Unit,
+    /** Opens the student's profile (read-only); null hides the affordance. */
+    val onOpenProfile: ((enrollmentId: Long) -> Unit)? = null,
 )
 
 @Composable
@@ -255,8 +257,7 @@ internal fun StudentAttendanceRow(
     roll: String,
     name: String,
     photoFile: String?,
-    first: AttendanceStatus?,
-    second: AttendanceStatus?,
+    status: AttendanceStatus?,
     editable: Boolean,
     blockedMessage: String,
     /** "Roll 4 · Month 12 · Total 40", or "Enrolled from ..." for a student not yet on the roll. */
@@ -267,49 +268,55 @@ internal fun StudentAttendanceRow(
     val content: @Composable () -> Unit = {
         Surface(shape = RowShape, color = MaterialTheme.colorScheme.surfaceContainerLowest) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                StudentAvatar(photoFile, roll)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (subtitle != null) {
+                // The avatar and name open the profile; only the mark button changes attendance.
+                val openProfile = actions.onOpenProfile
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RowShape)
+                        .then(
+                            if (openProfile != null) {
+                                Modifier.clickable(onClickLabel = "Open profile", role = Role.Button) {
+                                    openProfile(enrollmentId)
+                                }
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StudentAvatar(photoFile, roll)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
                         Text(
-                            subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
+                            name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
+                        if (subtitle != null) {
+                            Text(
+                                subtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
-                Spacer(Modifier.width(8.dp))
-                TimingButton(
-                    session = Session.FIRST,
-                    status = first,
+                MarkButton(
+                    status = status,
                     editable = editable,
                     studentName = name,
                     blockedMessage = blockedMessage,
-                    onCycle = { actions.onSetMark(enrollmentId, Session.FIRST, nextAttendanceStatus(first)) },
-                    onPick = { actions.onSetMark(enrollmentId, Session.FIRST, it) },
-                    onBlocked = actions.onBlocked,
-                )
-                Spacer(Modifier.width(8.dp))
-                TimingButton(
-                    session = Session.SECOND,
-                    status = second,
-                    editable = editable,
-                    studentName = name,
-                    blockedMessage = blockedMessage,
-                    onCycle = { actions.onSetMark(enrollmentId, Session.SECOND, nextAttendanceStatus(second)) },
-                    onPick = { actions.onSetMark(enrollmentId, Session.SECOND, it) },
+                    onCycle = { actions.onSetMark(enrollmentId, nextAttendanceStatus(status)) },
+                    onPick = { actions.onSetMark(enrollmentId, it) },
                     onBlocked = actions.onBlocked,
                 )
             }
@@ -320,13 +327,12 @@ internal fun StudentAttendanceRow(
             onAbsent = { actions.onSwipeAbsent(enrollmentId, name) },
             modifier = modifier.semantics {
                 customActions = listOf(
-                    CustomAccessibilityAction("Mark absent for both timings") {
+                    CustomAccessibilityAction("Mark absent") {
                         actions.onSwipeAbsent(enrollmentId, name)
                         true
                     },
-                    CustomAccessibilityAction("Mark present for both timings") {
-                        actions.onSetMark(enrollmentId, Session.FIRST, AttendanceStatus.PRESENT)
-                        actions.onSetMark(enrollmentId, Session.SECOND, AttendanceStatus.PRESENT)
+                    CustomAccessibilityAction("Mark present") {
+                        actions.onSetMark(enrollmentId, AttendanceStatus.PRESENT)
                         true
                     },
                 )
@@ -417,13 +423,12 @@ private fun SwipeAbsentBox(onAbsent: () -> Unit, modifier: Modifier, content: @C
 }
 
 /**
- * One timing of one student. Tap cycles none -> P -> A -> L -> none; a long press opens a compact picker so
- * any status is one step away. Locked or off-roll cells explain themselves when tapped.
+ * A student's mark for the day. Tap cycles none -> P -> A -> L -> none; a long press opens a compact picker
+ * so any status is one step away. Locked or off-roll cells explain themselves when tapped.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TimingButton(
-    session: Session,
+private fun MarkButton(
     status: AttendanceStatus?,
     editable: Boolean,
     studentName: String,
@@ -438,15 +443,13 @@ private fun TimingButton(
     val colors = status?.let { attendanceStatusColors(it) }
     val container = colors?.container ?: scheme.surfaceContainerHighest
     val content = colors?.content ?: scheme.onSurfaceVariant
-    val label = if (session == Session.FIRST) "1st" else "2nd"
     val next = nextAttendanceStatus(status)
-    val description = "$studentName, ${attendanceSessionWord(session)}: ${attendanceStatusWord(status)}"
+    val description = "$studentName: ${attendanceStatusWord(status)}"
 
     Box {
         Column(
             modifier = Modifier
-                .widthIn(min = 56.dp)
-                .heightIn(min = 52.dp)
+                .size(56.dp)
                 .background(container, ButtonShape)
                 .then(if (status == null) Modifier.border(1.dp, scheme.outlineVariant, ButtonShape) else Modifier)
                 .clip(ButtonShape)
@@ -476,7 +479,6 @@ private fun TimingButton(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = content.copy(alpha = 0.8f))
             Text(
                 attendanceStatusLetter(status),
                 style = MaterialTheme.typography.titleLarge,
@@ -527,25 +529,17 @@ private fun CountPill(text: String, container: Color, content: Color) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CountsLine(label: String, session: Session, counts: SessionCounts) {
-    // Each mark is one timing, half a day, so the totals read in days as in the PWA's "Present totals".
-    val present = formatSessionsAsDays(counts.present)
-    val absentDays = formatSessionsAsDays(counts.absent)
-    val leaveDays = formatSessionsAsDays(counts.leave)
-    val description = "${attendanceSessionWord(session).replaceFirstChar { it.uppercase() }}: $present days present, " +
-        "$absentDays days absent, $leaveDays days leave, ${counts.unmarked} students not marked"
+private fun CountsLine(counts: DayCounts) {
+    val present = counts.present
+    val absentDays = counts.absent
+    val leaveDays = counts.leave
+    val description = "$present present, $absentDays absent, $leaveDays on leave, ${counts.unmarked} not marked"
     FlowRow(
         modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = description },
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.widthIn(min = 32.dp),
-        )
         val presentColors = attendanceStatusColors(AttendanceStatus.PRESENT)
         val absentColors = attendanceStatusColors(AttendanceStatus.ABSENT)
         val leaveColors = attendanceStatusColors(AttendanceStatus.LEAVE)
@@ -568,11 +562,11 @@ private fun CountsLine(label: String, session: Session, counts: SessionCounts) {
  */
 @Composable
 internal fun AttendanceBottomBar(
-    counts: Map<Session, SessionCounts>?,
+    counts: DayCounts?,
     canDeclareHoliday: Boolean,
-    onBulk: (List<Session>, AttendanceStatus) -> Unit,
+    onBulk: (AttendanceStatus) -> Unit,
     onFillBlanks: () -> Unit,
-    onClear: (List<Session>) -> Unit,
+    onClear: () -> Unit,
     onDeclareHoliday: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -588,8 +582,7 @@ internal fun AttendanceBottomBar(
             Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            counts?.get(Session.FIRST)?.let { CountsLine("1st", Session.FIRST, it) }
-            counts?.get(Session.SECOND)?.let { CountsLine("2nd", Session.SECOND, it) }
+            counts?.let { CountsLine(it) }
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -616,17 +609,12 @@ internal fun AttendanceBottomBar(
                             AttendanceStatus.ABSENT to "All absent",
                             AttendanceStatus.LEAVE to "All leave",
                         )
-                        bulkStatuses.forEachIndexed { index, (status, label) ->
-                            if (index > 0) HorizontalDivider()
-                            BarMenuItem("$label: 1st timing", close) { onBulk(listOf(Session.FIRST), status) }
-                            BarMenuItem("$label: 2nd timing", close) { onBulk(listOf(Session.SECOND), status) }
+                        bulkStatuses.forEach { (status, label) ->
+                            BarMenuItem(label, close) { onBulk(status) }
                         }
                         HorizontalDivider()
                         BarMenuItem("Set blank marks to present", close, onFillBlanks)
-                        HorizontalDivider()
-                        BarMenuItem("Clear 1st timing", close) { onClear(listOf(Session.FIRST)) }
-                        BarMenuItem("Clear 2nd timing", close) { onClear(listOf(Session.SECOND)) }
-                        BarMenuItem("Clear both timings", close) { onClear(Session.entries) }
+                        BarMenuItem("Clear the day's marks", close, onClear)
                         if (canDeclareHoliday) {
                             HorizontalDivider()
                             BarMenuItem("Declare holiday", close, onDeclareHoliday)
@@ -637,7 +625,7 @@ internal fun AttendanceBottomBar(
                 Button(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                        onBulk(Session.entries, AttendanceStatus.PRESENT)
+                        onBulk(AttendanceStatus.PRESENT)
                     },
                 ) {
                     Icon(Icons.Rounded.DoneAll, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -704,7 +692,7 @@ internal fun AttendanceNobodyOnRollBanner(date: LocalDate, onEditStudents: (() -
                     )
                     Text(
                         "The date is editable, but each student\u2019s admission date is later. Update the admission " +
-                            "date to enable these timings.",
+                            "date to mark this day.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }

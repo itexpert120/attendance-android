@@ -76,7 +76,7 @@ val AbsenceMessageToken.chipLabel: String
     get() = when (this) {
         AbsenceMessageToken.STUDENT -> "Student"
         AbsenceMessageToken.DATE -> "Date"
-        AbsenceMessageToken.SESSION -> "Timing"
+        AbsenceMessageToken.SESSION -> "Day"
         AbsenceMessageToken.SCHOOL -> "School"
         AbsenceMessageToken.CLASS -> "Class"
         AbsenceMessageToken.ROLL -> "Roll no."
@@ -91,7 +91,7 @@ fun previewMessage(form: SchoolSettingsForm, dateText: String): String {
         AbsenceMessageContext(
             student = "Ayaan Khan",
             date = dateText,
-            session = "the first timing",
+            session = com.itexpert120.attendanceManager.data.repo.ABSENCE_SESSION_LABEL,
             school = form.schoolName.trim().ifEmpty { "Your School" },
             className = "Class 7, Section A",
             roll = "12",

@@ -6,7 +6,6 @@ import com.itexpert120.attendanceManager.domain.AttendanceReportStudent
 import com.itexpert120.attendanceManager.domain.formatAbsenceMessage
 import com.itexpert120.attendanceManager.model.ClassGroup
 import com.itexpert120.attendanceManager.model.SchoolSettings
-import com.itexpert120.attendanceManager.model.Session
 
 /*
  * Builds the parent-message text for the Reports tab (see ReportsPanel.messageText in the PWA). Pure so
@@ -21,12 +20,11 @@ data class AbsenceMessageRecipient(
     val message: String,
 )
 
-/** "both timings", "the first timing" or "the second timing". */
-fun absenceSessionLabel(absentSessions: List<Session>): String = when {
-    absentSessions.size >= 2 -> "both timings"
-    absentSessions.firstOrNull() == Session.FIRST -> "the first timing"
-    else -> "the second timing"
-}
+/**
+ * What the `{session}` token says. Attendance is taken once a day, so an absence always covers the
+ * whole day: "... was marked absent for the day on ...".
+ */
+const val ABSENCE_SESSION_LABEL = "the day"
 
 fun absenceMessageContext(
     student: AttendanceReportStudent,
@@ -38,7 +36,7 @@ fun absenceMessageContext(
     return AbsenceMessageContext(
         student = student.row.student.name,
         date = report.period.label,
-        session = absenceSessionLabel(student.absentSessions),
+        session = ABSENCE_SESSION_LABEL,
         school = settings?.schoolName ?: "school",
         className = classGroup?.let { "Class ${it.className}, Section ${it.section}" } ?: "the class",
         roll = student.row.enrollment.rollNumber,
@@ -57,8 +55,8 @@ fun absenceMessage(
 )
 
 /**
- * One recipient per student who has at least one absence in [report], in roll order. Session wording is
- * only meaningful for daily reports, which is where the UI offers messaging.
+ * One recipient per student who has at least one absence in [report], in roll order. The UI offers
+ * messaging for daily reports.
  */
 fun absenceMessageRecipients(
     report: AttendanceReport,

@@ -184,7 +184,7 @@ private fun AttendanceHero(figures: SummaryFigures) {
 private fun AttendanceDetails(figures: SummaryFigures, hasSettings: Boolean) {
     GroupCard(header = "Working days and totals") {
         SummaryRow("Working days", figures.workingDays, "Weekends and declared holidays are not counted")
-        SummaryRow("Total timings", figures.workingTimings.toString(), "Two timings per working day")
+
         SummaryRow("Brought forward", figures.broughtForwardDays, "Present days in earlier months of this academic year")
         SummaryRow("Academic year to date", figures.academicYearDays, "Brought forward plus this month")
         if (!hasSettings) {

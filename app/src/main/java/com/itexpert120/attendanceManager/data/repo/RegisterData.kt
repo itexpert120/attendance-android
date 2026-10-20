@@ -40,7 +40,7 @@ data class RegisterListItem(val register: Register, val classGroup: ClassGroup?)
  *    movement and reports use this list.
  * Both are in natural roll-number order.
  *
- * Attendance is counted in sessions (1 session = the PWA's 0.5 day).
+ * Attendance is taken once a day (stored as [Session.FIRST]), so every attendance count is in days.
  */
 data class RegisterData(
     val register: Register,
@@ -79,52 +79,51 @@ data class RegisterData(
     fun isDayEditable(day: Int, today: LocalDate): Boolean = isAttendanceDateEditable(register, day, today)
 
     private val statusByCell: Map<MarkKey, AttendanceStatus> by lazy {
-        marks.associate { MarkKey(it.enrollmentId, it.day, it.session) to it.status }
+        marks.filter { it.session == Session.FIRST }.associate { MarkKey(it.enrollmentId, it.day) to it.status }
     }
 
-    fun statusOf(enrollmentId: Long, day: Int, session: Session): AttendanceStatus? =
-        statusByCell[MarkKey(enrollmentId, day, session)]
+    /** One student's mark for [day], or null when unmarked. */
+    fun statusOf(enrollmentId: Long, day: Int): AttendanceStatus? = statusByCell[MarkKey(enrollmentId, day)]
 
     /** Whether any enrollment has a mark on [day]; used to warn before a holiday clears them. */
     fun hasMarksOn(day: Int): Boolean = marks.any { it.day == day }
 
-    /** Present sessions this month per enrollment (hidden students included). */
+    /** Present days this month per enrollment (hidden students included). */
     val presentByEnrollment: Map<Long, Int> by lazy { presentSessionsByEnrollment(marks, setOf(register.id)) }
 
     fun presentSessionsOf(enrollmentId: Long): Int = presentByEnrollment[enrollmentId] ?: 0
 
     fun broughtForwardOf(enrollmentId: Long): Int = broughtForwardByEnrollment[enrollmentId] ?: 0
 
-    /** Present sessions this month across all students; the summary's "Month attendance". */
+    /** Present days this month across all students; the summary's "Month attendance". */
     val monthPresentSessions: Int by lazy { presentByEnrollment.values.sum() }
 
-    /** Brought-forward sessions across all students; the summary's year-to-date minus this month. */
+    /** Brought-forward present days across all students; the summary's year-to-date minus this month. */
     val broughtForwardTotal: Int by lazy { broughtForwardByEnrollment.values.sum() }
 
     /** Footer totals of the attendance grid / printed register: visible students only. */
     val visiblePresentTotal: Int by lazy { attendanceRows.sumOf { presentSessionsOf(it.enrollment.id) } }
     val visibleBroughtForwardTotal: Int by lazy { attendanceRows.sumOf { broughtForwardOf(it.enrollment.id) } }
 
-    /** Present students per (day, session), counting only students shown in the attendance grid. */
-    val presentByDaySession: Map<Pair<Int, Session>, Int> by lazy {
+    /** Present students per day, counting only students shown in the attendance grid. */
+    val presentByDay: Map<Int, Int> by lazy {
         val visibleIds = attendanceRows.mapTo(HashSet()) { it.enrollment.id }
-        val totals = HashMap<Pair<Int, Session>, Int>()
+        val totals = HashMap<Int, Int>()
         for (mark in marks) {
             if (mark.status != AttendanceStatus.PRESENT || mark.enrollmentId !in visibleIds) continue
-            val key = mark.day to mark.session
-            totals[key] = (totals[key] ?: 0) + 1
+            totals[mark.day] = (totals[mark.day] ?: 0) + 1
         }
         totals
     }
 
-    fun presentOn(day: Int, session: Session): Int = presentByDaySession[day to session] ?: 0
+    fun presentOn(day: Int): Int = presentByDay[day] ?: 0
 
-    /** Timings (sessions) in the month on which students can attend: non-holiday days times two. */
-    val workingTimings: Int by lazy { domainWorkingTimings(register, holidayDays) }
+    /** Working days in the month: days that are neither weekends nor declared holidays. */
+    val workingDays: Int by lazy { domainWorkingTimings(register, holidayDays) }
 
-    /** Present sessions per working timing, as the PWA's "Average attendance" (0.0 with no timings). */
+    /** Present students per working day, as the PWA's "Average attendance" (0.0 with no working days). */
     val averageAttendance: Double
-        get() = if (workingTimings == 0) 0.0 else monthPresentSessions.toDouble() / workingTimings
+        get() = if (workingDays == 0) 0.0 else monthPresentSessions.toDouble() / workingDays
 
     val movement by lazy { monthlyMovement(monthRows, register) }
 
@@ -167,5 +166,5 @@ data class RegisterData(
     fun report(type: ReportPeriodType, selectedDay: Int): AttendanceReport =
         attendanceReport(monthRows, marks, holidayDays, register, type, selectedDay)
 
-    private data class MarkKey(val enrollmentId: Long, val day: Int, val session: Session)
+    private data class MarkKey(val enrollmentId: Long, val day: Int)
 }

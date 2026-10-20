@@ -58,16 +58,19 @@ class ReportsLogicTest {
         val marks = listOf(
             mark(1, 1, 6, Session.FIRST, AttendanceStatus.PRESENT),
             mark(1, 2, 6, Session.FIRST, AttendanceStatus.ABSENT),
-            mark(1, 2, 6, Session.SECOND, AttendanceStatus.LEAVE),
+            mark(1, 2, 7, Session.FIRST, AttendanceStatus.LEAVE),
         )
         val report = attendanceReport(rows, marks, emptySet(), october, ReportPeriodType.DAILY, 6)
-        // Figures are days: each timing counts as 0.5, as in the PWA.
-        assertEquals("P 0.5 · A 0 · L 0 · blank 0.5", reportCountsLine(report.students[0]))
-        assertEquals("P 0 · A 0.5 · L 0.5", reportCountsLine(report.students[1]))
+        // Figures are whole days: one mark per student and day.
+        assertEquals("P 1 · A 0 · L 0", reportCountsLine(report.students[0]))
+        assertEquals("P 0 · A 1 · L 0", reportCountsLine(report.students[1]))
         assertEquals(listOf(2L), reportAbsentees(report).map { it.row.enrollment.id })
         assertEquals("daily-6", reportSentPeriod(report))
         val weekly = attendanceReport(rows, marks, emptySet(), october, ReportPeriodType.WEEKLY, 7)
         assertEquals("weekly-5", reportSentPeriod(weekly))
+        // Monday 5th to Sunday 11th: five school days each.
+        assertEquals("P 1 · A 0 · L 0 · blank 4", reportCountsLine(weekly.students[0]))
+        assertEquals("P 0 · A 1 · L 1 · blank 3", reportCountsLine(weekly.students[1]))
     }
 
     @Test

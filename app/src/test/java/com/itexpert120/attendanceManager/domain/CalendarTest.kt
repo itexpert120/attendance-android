@@ -3,7 +3,6 @@ package com.itexpert120.attendanceManager.domain
 import com.itexpert120.attendanceManager.model.AttendanceStatus.ABSENT
 import com.itexpert120.attendanceManager.model.AttendanceStatus.PRESENT
 import com.itexpert120.attendanceManager.model.Session.FIRST
-import com.itexpert120.attendanceManager.model.Session.SECOND
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -56,7 +55,7 @@ class CalendarTest {
         assertTrue(isHolidayDay(august, 2, holidays)) // Sunday
         assertTrue(isHolidayDay(august, 3, holidays)) // declared
         assertFalse(isHolidayDay(august, 4, holidays))
-        assertEquals(40, workingTimings(august, holidays)) // 31 days - 10 weekend days - 1 holiday = 20 days
+        assertEquals(20, workingTimings(august, holidays)) // 31 days - 10 weekend days - 1 holiday = 20 days
     }
 
     @Test
@@ -66,7 +65,7 @@ class CalendarTest {
         val may = register(3, 2026, 5)
         val marks = listOf(
             mark(april.id, 1, 1, FIRST, PRESENT),
-            mark(april.id, 1, 1, SECOND, ABSENT),
+            mark(april.id, 1, 2, FIRST, ABSENT),
             mark(may.id, 1, 1, FIRST, PRESENT),
             mark(march.id, 1, 1, FIRST, PRESENT),
         )
@@ -91,7 +90,7 @@ class CalendarTest {
     fun `sums present sessions per enrollment across the given registers`() {
         val marks = listOf(
             mark(1, 10, 1, FIRST, PRESENT),
-            mark(1, 10, 1, SECOND, PRESENT),
+            mark(1, 10, 2, FIRST, PRESENT),
             mark(2, 10, 3, FIRST, PRESENT),
             mark(1, 11, 1, FIRST, ABSENT),
             mark(3, 10, 1, FIRST, PRESENT), // register not requested
@@ -168,9 +167,9 @@ class CalendarTest {
         )
         assertEquals("Monday, August 3, 2026", report.period.label)
         assertEquals(1, report.absent)
-        assertEquals(1, report.unmarked)
-        assertEquals(2, report.possible)
-        assertEquals(listOf(FIRST), report.students.single().absentSessions)
+        assertEquals(0, report.unmarked)
+        assertEquals(1, report.possible)
+        assertTrue(report.students.single().absentOnDay)
     }
 
     @Test
@@ -186,9 +185,10 @@ class CalendarTest {
             selectedDay = 12,
         )
         // Mon 10 - Sun 16: not enrolled until Wed 12, Fri 14 is a holiday, Sat/Sun are weekend.
-        // Counted days: Wed 12 and Thu 13 = 4 unmarked sessions.
-        assertEquals(4, report.unmarked)
-        assertEquals(4, report.possible)
+        // Counted days: Wed 12 and Thu 13 = 2 unmarked days.
+        assertEquals(2, report.unmarked)
+        assertEquals(2, report.possible)
+        assertFalse(report.students.single().absentOnDay)
     }
 
     @Test
@@ -223,8 +223,8 @@ class CalendarTest {
     }
 
     @Test
-    fun `converts sessions to days`() {
-        assertEquals(0.5, sessionsToDays(1), 0.0)
-        assertEquals(2.5, sessionsToDays(5), 0.0)
+    fun `one session is one day`() {
+        assertEquals(1.0, sessionsToDays(1), 0.0)
+        assertEquals(5.0, sessionsToDays(5), 0.0)
     }
 }

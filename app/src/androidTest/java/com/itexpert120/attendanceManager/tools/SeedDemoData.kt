@@ -106,15 +106,14 @@ class SeedDemoData {
                 enrollmentIds.forEach { id ->
                     if (admittedOn.getValue(id) > date) return@forEach
                     if (struckOffOn[id]?.let { it < date } == true) return@forEach
-                    Session.entries.forEach { session ->
-                        val roll = random.nextInt(100)
-                        val status = when {
-                            roll < 90 -> AttendanceStatus.PRESENT
-                            roll < 96 -> AttendanceStatus.ABSENT
-                            else -> AttendanceStatus.LEAVE
-                        }
-                        marks += AttendanceMark(register.id, id, day, session, status)
+                    // Attendance is taken once a day.
+                    val roll = random.nextInt(100)
+                    val status = when {
+                        roll < 90 -> AttendanceStatus.PRESENT
+                        roll < 96 -> AttendanceStatus.ABSENT
+                        else -> AttendanceStatus.LEAVE
                     }
+                    marks += AttendanceMark(register.id, id, day, Session.FIRST, status)
                 }
             }
             db.attendance().upsertAll(marks)

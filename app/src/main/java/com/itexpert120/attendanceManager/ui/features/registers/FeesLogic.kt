@@ -5,7 +5,7 @@ import com.itexpert120.attendanceManager.data.repo.RegisterData
 import com.itexpert120.attendanceManager.domain.FeeField
 import com.itexpert120.attendanceManager.domain.displayToMinor
 import com.itexpert120.attendanceManager.domain.minorToDisplay
-import com.itexpert120.attendanceManager.domain.sessionsToDays
+
 import com.itexpert120.attendanceManager.model.EnrollmentRow
 import com.itexpert120.attendanceManager.model.FeeAmounts
 import com.itexpert120.attendanceManager.model.InstallmentMeta
@@ -42,11 +42,8 @@ val InstallmentNumber.longLabel: String get() = "$shortLabel installment"
 /** "student" or "students" with the count in front: "1 student", "12 students". */
 fun feeStudentCountLabel(count: Int): String = if (count == 1) "1 student" else "$count students"
 
-/** Attendance is stored in sessions (half days); the register shows days, with ".5" for an odd session. */
-fun summaryDaysLabel(sessions: Int): String {
-    val days = sessionsToDays(sessions)
-    return if (sessions % 2 == 0) days.toLong().toString() else String.format(Locale.US, "%.1f", days)
-}
+/** Attendance is taken once a day, so the register's attendance figures are whole days. */
+fun summaryDaysLabel(days: Int): String = days.toString()
 
 /** The PWA's `average.toFixed(2)`. */
 fun summaryAverageLabel(average: Double): String = String.format(Locale.US, "%.2f", average)
@@ -129,7 +126,7 @@ fun FeeFilter.accepts(status: FeeStatus): Boolean = when (this) {
     FeeFilter.NONE -> status == FeeStatus.NONE
 }
 
-/** Matches name, roll number or admission number, ignoring case and surrounding spaces. */
+/** Matches name, roll number or B-Form number, ignoring case and surrounding spaces. */
 fun List<FeeCard>.filtered(query: String, filter: FeeFilter): List<FeeCard> {
     val needle = query.trim()
     return filter { card ->

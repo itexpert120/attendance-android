@@ -55,12 +55,11 @@ class AttendanceLogicTest {
         val late = row(enrollment(2, "2026-10-20"))
         val marks = listOf(
             mark(1, 1, 5, Session.FIRST, AttendanceStatus.PRESENT),
-            mark(1, 1, 5, Session.SECOND, AttendanceStatus.PRESENT),
             mark(1, 1, 6, Session.FIRST, AttendanceStatus.PRESENT),
-            mark(1, 1, 6, Session.SECOND, AttendanceStatus.ABSENT),
+            mark(1, 1, 7, Session.FIRST, AttendanceStatus.ABSENT),
         )
         val snapshot = data(listOf(ayesha, late), marks, broughtForward = mapOf(1L to 40))
-        assertEquals("Roll 4 · Month 1.5 · Total 21.5", dayRowSubtitle(snapshot, ayesha, 6))
+        assertEquals("Roll 4 · Month 2 · Total 42", dayRowSubtitle(snapshot, ayesha, 6))
         assertEquals("Enrolled from October 20, 2026", dayRowSubtitle(snapshot, late, 6))
     }
 
@@ -78,10 +77,51 @@ class AttendanceLogicTest {
     }
 
     @Test
-    fun sessionsReadAsDays() {
-        assertEquals("0", formatSessionsAsDays(0))
-        assertEquals("0.5", formatSessionsAsDays(1))
-        assertEquals("6", formatSessionsAsDays(12))
-        assertEquals("6.5", formatSessionsAsDays(13))
+    fun countsReadAsWholeDays() {
+        assertEquals("0", formatDays(0))
+        assertEquals("1", formatDays(1))
+        assertEquals("13", formatDays(13))
+    }
+
+    @Test
+    fun dayCountsAndBlanksCoverOneMarkPerStudent() {
+        val a = row(enrollment(1, "2026-04-01"))
+        val b = row(enrollment(2, "2026-04-01"))
+        val c = row(enrollment(3, "2026-04-01"))
+        val snapshot = data(
+            listOf(a, b, c),
+            listOf(
+                mark(1, 1, 6, Session.FIRST, AttendanceStatus.PRESENT),
+                mark(1, 2, 6, Session.FIRST, AttendanceStatus.ABSENT),
+            ),
+        )
+        assertEquals(DayCounts(present = 1, absent = 1, leave = 0, unmarked = 1), dayCounts(snapshot, 6))
+        assertEquals(listOf(MarkChange(3, null)), blankCells(snapshot, 6))
+        assertEquals(3, snapshotMarks(snapshot, 6).size)
+    }
+
+    @Test
+    fun heatStripHasOneCellPerDay() {
+        val a = row(enrollment(1, "2026-04-01"))
+        val snapshot = data(
+            listOf(a),
+            listOf(
+                mark(1, 1, 5, Session.FIRST, AttendanceStatus.PRESENT),
+                mark(1, 1, 6, Session.FIRST, AttendanceStatus.LEAVE),
+            ),
+        )
+        val cells = heatCells(snapshot, a)
+        assertEquals(31, cells.size)
+        assertEquals(AttendanceStatus.PRESENT, cells[4].status)
+        assertEquals(HeatKind.NO_SCHOOL, cells[2].kind) // Saturday the 3rd
+        assertEquals(mapOf(AttendanceStatus.PRESENT to 1, AttendanceStatus.LEAVE to 1), heatTotals(cells))
+    }
+
+    @Test
+    fun cycleOrderIsNonePresentAbsentLeave() {
+        assertEquals(AttendanceStatus.PRESENT, nextAttendanceStatus(null))
+        assertEquals(AttendanceStatus.ABSENT, nextAttendanceStatus(AttendanceStatus.PRESENT))
+        assertEquals(AttendanceStatus.LEAVE, nextAttendanceStatus(AttendanceStatus.ABSENT))
+        assertEquals(null, nextAttendanceStatus(AttendanceStatus.LEAVE))
     }
 }

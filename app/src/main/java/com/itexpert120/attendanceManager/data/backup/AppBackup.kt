@@ -9,6 +9,7 @@ import androidx.sqlite.SQLiteException
 import com.itexpert120.attendanceManager.data.db.AttendanceDatabase
 import com.itexpert120.attendanceManager.domain.PhotoStore
 import com.itexpert120.attendanceManager.domain.ValidationException
+import com.itexpert120.attendanceManager.domain.mergeTimings
 import com.itexpert120.attendanceManager.model.AttendanceMark
 import com.itexpert120.attendanceManager.model.ClassGroup
 import com.itexpert120.attendanceManager.model.Enrollment
@@ -22,6 +23,7 @@ import com.itexpert120.attendanceManager.model.SchoolSettings
 import com.itexpert120.attendanceManager.model.Student
 import com.itexpert120.attendanceManager.model.StudentRemark
 import com.itexpert120.attendanceManager.model.Subject
+import com.itexpert120.attendanceManager.model.SubjectTeacher
 import com.itexpert120.attendanceManager.model.TestRecord
 import com.itexpert120.attendanceManager.model.TestRosterEntry
 import kotlinx.coroutines.CoroutineDispatcher
@@ -207,6 +209,7 @@ class AppBackup(
         installmentMeta = db.fees().getAllMeta().map { it.toDto() },
         remarks = db.fees().getAllRemarks().map { it.toDto() },
         subjects = db.subjects().getAll().map { it.toDto() },
+        subjectTeachers = db.subjectTeachers().getAll().map { it.toDto() },
         tests = db.tests().getAll().map { it.toDto() },
         testRoster = db.tests().getAllRosterEntries().map { it.toDto() },
         homeworkReports = db.homework().getAllReports().map { it.toDto() },
@@ -307,6 +310,7 @@ class AppBackup(
         db.classGroups().insertAll(rows.classGroups)
         db.students().insertAll(rows.students)
         db.subjects().insertAll(rows.subjects)
+        db.subjectTeachers().insertAll(rows.subjectTeachers)
         db.enrollments().insertAll(rows.enrollments)
         db.registers().insertAll(rows.registers)
         db.attendance().upsertAll(rows.attendance)
@@ -322,7 +326,8 @@ class AppBackup(
 
     companion object {
         const val FORMAT_NAME = "attendance-manager-backup"
-        const val FORMAT_VERSION = 1
+        /** Written into new backups; every version from 1 up to this one can be restored. */
+        const val FORMAT_VERSION = 2
         const val MIME_TYPE = "application/zip"
 
         const val NOT_A_BACKUP = "This file is not an Attendance backup. Pick a .zip file made with \"Back up now\"."
@@ -352,7 +357,7 @@ class AppBackup(
         private val TABLES_CHILDREN_FIRST = listOf(
             "homework_items", "homework_reports", "test_roster_entries", "tests", "attendance_marks", "holidays",
             "fee_entries", "installment_meta", "student_remarks", "registers", "enrollments", "students",
-            "class_groups", "subjects", "school_settings",
+            "subject_teachers", "class_groups", "subjects", "school_settings",
         )
 
         private fun mimeTypeFor(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
@@ -407,6 +412,7 @@ private class RestoreRows(
     val installmentMeta: List<InstallmentMeta>,
     val remarks: List<StudentRemark>,
     val subjects: List<Subject>,
+    val subjectTeachers: List<SubjectTeacher>,
     val tests: List<TestRecord>,
     val testRoster: List<TestRosterEntry>,
     val homeworkReports: List<HomeworkReport>,
@@ -433,6 +439,7 @@ private class RestoreRows(
             installmentMeta = installmentMeta,
             remarks = remarks,
             subjects = subjects,
+            subjectTeachers = subjectTeachers,
             tests = tests,
             testRoster = testRoster,
             homeworkReports = homeworkReports.map { it.copy(photoFile = map(it.photoFile)) },
@@ -452,6 +459,7 @@ private class RestoreRows(
         BackupTables.INSTALLMENT_META to installmentMeta.size,
         BackupTables.REMARKS to remarks.size,
         BackupTables.SUBJECTS to subjects.size,
+        BackupTables.SUBJECT_TEACHERS to subjectTeachers.size,
         BackupTables.TESTS to tests.size,
         BackupTables.TEST_ROSTER to testRoster.size,
         BackupTables.HOMEWORK_REPORTS to homeworkReports.size,
@@ -460,7 +468,8 @@ private class RestoreRows(
 
     /**
      * Keys and references the database would otherwise reject halfway through the transaction. Unique
-     * business keys (admission numbers, class names ...) are left to the database's own constraints.
+     * business keys (B-Form numbers, class names ...) are left to the database's own constraints. Attendance
+     * has already been merged to one mark per student and day, so its key leaves out the session.
      */
     fun check() {
         fun fail(detail: String): Nothing =
@@ -480,7 +489,8 @@ private class RestoreRows(
         val testIds = tests.uniqueKeys("tests") { it.id }
         val reportIds = homeworkReports.uniqueKeys("homework") { it.id }
         homeworkItems.uniqueKeys("homework items") { it.id }
-        attendance.uniqueKeys("attendance") { listOf(it.registerId, it.enrollmentId, it.day.toLong(), it.session.number.toLong()) }
+        attendance.uniqueKeys("attendance") { Triple(it.registerId, it.enrollmentId, it.day) }
+        subjectTeachers.uniqueKeys("subject teachers") { it.classGroupId to it.subjectId }
         holidays.uniqueKeys("holidays") { it.registerId to it.day }
         feeEntries.uniqueKeys("fees") { Triple(it.registerId, it.enrollmentId, it.installment) }
         installmentMeta.uniqueKeys("installments") { it.registerId to it.installment }
@@ -501,6 +511,7 @@ private class RestoreRows(
         testRoster.forEach { refs("test rosters", it.testId in testIds && it.enrollmentId in enrollmentIds) }
         homeworkReports.forEach { refs("homework", it.classGroupId in classIds) }
         homeworkItems.forEach { refs("homework items", it.reportId in reportIds && it.subjectId in subjectIds) }
+        subjectTeachers.forEach { refs("subject teachers", it.classGroupId in classIds && it.subjectId in subjectIds) }
 
         if (attendance.any { it.day !in 1..31 } || holidays.any { it.day !in 1..31 }) fail("a day is out of range")
     }
@@ -514,12 +525,14 @@ private fun BackupData.toRows(): RestoreRows {
         students = students.map { it.toEntity(keepName) },
         enrollments = enrollments.map { it.toEntity() },
         registers = registers.map { it.toEntity() },
-        attendance = attendance.map { it.toEntity() },
+        // Older backups may hold two timings per day; only one mark per day is ever stored now.
+        attendance = mergeTimings(attendance.map { it.toEntity() }),
         holidays = holidays.map { it.toEntity() },
         feeEntries = feeEntries.map { it.toEntity() },
         installmentMeta = installmentMeta.map { it.toEntity() },
         remarks = remarks.map { it.toEntity() },
         subjects = subjects.map { it.toEntity() },
+        subjectTeachers = subjectTeachers.map { it.toEntity() },
         tests = tests.map { it.toEntity() },
         testRoster = testRoster.map { it.toEntity() },
         homeworkReports = homeworkReports.map { it.toEntity(keepName) },

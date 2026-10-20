@@ -91,7 +91,7 @@ fun academicYearStartYear(date: LocalDate, academicYearStartMonth: Int): Int =
 fun isHolidayDay(register: Register, day: Int, holidayDays: Set<Int>): Boolean =
     isWeekend(register.dateOf(day)) || day in holidayDays
 
-/** Number of timings (sessions) a student can attend in the register's month. */
+/** Number of working days (weekends and declared holidays excluded) in the register's month. */
 fun workingTimings(register: Register, holidayDays: Set<Int>): Int =
     register.days.count { !isHolidayDay(register, it, holidayDays) } * SESSIONS_PER_DAY
 

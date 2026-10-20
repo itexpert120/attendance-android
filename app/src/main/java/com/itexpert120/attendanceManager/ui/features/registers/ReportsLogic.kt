@@ -16,7 +16,7 @@ import kotlin.math.roundToInt
  * period and the text of the SMS / WhatsApp / dial links. No Android types, so they run in JVM unit tests.
  */
 
-/** Present as a share of the marked timings (present + absent + leave), or null when nothing is marked. */
+/** Present as a share of the marked days (present + absent + leave), or null when nothing is marked. */
 internal fun attendanceRate(present: Int, absent: Int, leave: Int): Double? {
     val marked = present + absent + leave
     return if (marked == 0) null else present * 100.0 / marked
@@ -79,17 +79,16 @@ internal fun reportPeriodHint(type: ReportPeriodType): String = when (type) {
 }
 
 /**
- * "P 2 · A 1 · L 0", plus the blank count only when there is any (the PWA's student row). Figures are days:
- * each timing counts as 0.5, as in the PWA.
+ * "P 2 · A 1 · L 0", plus the blank count only when there is any (the PWA's student row). Figures are days.
  */
 internal fun reportCountsLine(student: AttendanceReportStudent): String = buildString {
-    append("P ${formatSessionsAsDays(student.present)} · A ${formatSessionsAsDays(student.absent)} · L ${formatSessionsAsDays(student.leave)}")
-    if (student.unmarked > 0) append(" · blank ${formatSessionsAsDays(student.unmarked)}")
+    append("P ${formatDays(student.present)} · A ${formatDays(student.absent)} · L ${formatDays(student.leave)}")
+    if (student.unmarked > 0) append(" · blank ${formatDays(student.unmarked)}")
 }
 
-/** The PWA's note under the report figures. */
+/** The note under the report figures. */
 internal const val REPORT_TIMING_NOTE =
-    "Each timing counts as 0.5. Weekends, holidays and dates before enrollment are excluded."
+    "Figures are in days. Weekends, holidays and dates before enrollment are excluded."
 
 /** Students absent at least once in the period, in roll order. */
 internal fun reportAbsentees(report: AttendanceReport): List<AttendanceReportStudent> =

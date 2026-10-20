@@ -75,7 +75,7 @@ class SchoolSettingsLogicTest {
             template = "{student} missed {session} on {date} at {school}; call {incharge} ({class}, roll {roll}).",
         )
         assertEquals(
-            "Ayaan Khan missed the first timing on May 4, 2026 at Crescent; call Ms. Ali, the class incharge " +
+            "Ayaan Khan missed the day on May 4, 2026 at Crescent; call Ms. Ali, the class incharge " +
                 "(Class 7, Section A, roll 12).",
             previewMessage(form, "May 4, 2026"),
         )

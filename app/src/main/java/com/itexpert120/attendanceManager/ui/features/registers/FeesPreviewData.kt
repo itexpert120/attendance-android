@@ -56,7 +56,7 @@ internal object SamplePreviewData {
         val marks = if (withStudents) {
             (1..3).flatMap { day ->
                 (1L..4L).flatMap { id ->
-                    Session.entries.map { AttendanceMark(1, id, day + 2, it, AttendanceStatus.PRESENT) }
+                    listOf(AttendanceMark(1, id, day + 2, Session.FIRST, AttendanceStatus.PRESENT))
                 }
             }
         } else {

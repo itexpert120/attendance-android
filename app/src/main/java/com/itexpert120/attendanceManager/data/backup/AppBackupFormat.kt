@@ -17,6 +17,7 @@ import com.itexpert120.attendanceManager.model.Session
 import com.itexpert120.attendanceManager.model.Student
 import com.itexpert120.attendanceManager.model.StudentRemark
 import com.itexpert120.attendanceManager.model.Subject
+import com.itexpert120.attendanceManager.model.SubjectTeacher
 import com.itexpert120.attendanceManager.model.TestRecord
 import com.itexpert120.attendanceManager.model.TestResultStatus
 import com.itexpert120.attendanceManager.model.TestRosterEntry
@@ -25,7 +26,7 @@ import kotlinx.serialization.Serializable
 import kotlin.time.Instant
 
 /*
- * The on-disk shape of a native backup (format version 1). It is deliberately decoupled from the Room
+ * The on-disk shape of a native backup (format version 2). It is deliberately decoupled from the Room
  * entities: dates are ISO text, timestamps epoch milliseconds, enums their stable codes, so a schema change
  * only needs a new mapping here (and, when the meaning changes, a new format version), never a change to
  * old files. Ids are kept as they are, so a restore reproduces the database exactly.
@@ -35,6 +36,11 @@ import kotlin.time.Instant
  *   data.json       [BackupData]      every table
  *   photos/<name>   one entry per photo file referenced by the data (missing files are left out)
  *   complete        end marker holding the number of photos; a file without it is incomplete
+ *
+ * Versions:
+ *   1  the first native format; attendance could hold two timings (session 1 and 2) per day.
+ *   2  adds [BackupData.subjectTeachers]. Attendance is written with session 1 only. Version 1 files are still
+ *      read: the missing table is empty and two-timing attendance is merged into one mark per day on restore.
  */
 
 @Serializable
@@ -62,6 +68,7 @@ object BackupTables {
     const val INSTALLMENT_META = "installmentMeta"
     const val REMARKS = "remarks"
     const val SUBJECTS = "subjects"
+    const val SUBJECT_TEACHERS = "subjectTeachers"
     const val TESTS = "tests"
     const val TEST_ROSTER = "testRoster"
     const val HOMEWORK_REPORTS = "homeworkReports"
@@ -81,6 +88,8 @@ internal class BackupData(
     val installmentMeta: List<InstallmentMetaDto> = emptyList(),
     val remarks: List<RemarkDto> = emptyList(),
     val subjects: List<SubjectDto> = emptyList(),
+    /** Added in format version 2; older files have none. */
+    val subjectTeachers: List<SubjectTeacherDto> = emptyList(),
     val tests: List<TestDto> = emptyList(),
     val testRoster: List<RosterEntryDto> = emptyList(),
     val homeworkReports: List<HomeworkReportDto> = emptyList(),
@@ -98,6 +107,7 @@ internal class BackupData(
         BackupTables.INSTALLMENT_META to installmentMeta.size,
         BackupTables.REMARKS to remarks.size,
         BackupTables.SUBJECTS to subjects.size,
+        BackupTables.SUBJECT_TEACHERS to subjectTeachers.size,
         BackupTables.TESTS to tests.size,
         BackupTables.TEST_ROSTER to testRoster.size,
         BackupTables.HOMEWORK_REPORTS to homeworkReports.size,
@@ -150,7 +160,10 @@ internal class EnrollmentDto(
 @Serializable
 internal class RegisterDto(val id: Long, val classGroupId: Long, val year: Int, val month: Int, val createdAt: Long)
 
-/** [session] is 1 or 2, [status] the register code "P", "A" or "L". */
+/**
+ * [session] is always 1 since attendance is taken once a day (format version 1 files may also hold 2; those
+ * are merged into one mark per day on restore), [status] the register code "P", "A" or "L".
+ */
 @Serializable
 internal class AttendanceDto(
     val registerId: Long,
@@ -192,6 +205,9 @@ internal class SubjectDto(
     val createdAt: Long,
     val updatedAt: Long,
 )
+
+@Serializable
+internal class SubjectTeacherDto(val classGroupId: Long, val subjectId: Long, val teacherName: String)
 
 /** [totalMarks] in hundredths. */
 @Serializable
@@ -266,6 +282,8 @@ internal fun StudentRemark.toDto() = RemarkDto(registerId, enrollmentId, text)
 
 internal fun Subject.toDto() = SubjectDto(id, name, normalizedName, archivedAt?.ms(), createdAt.ms(), updatedAt.ms())
 
+internal fun SubjectTeacher.toDto() = SubjectTeacherDto(classGroupId, subjectId, teacherName)
+
 internal fun TestRecord.toDto() = TestDto(
     id, name, normalizedName, subjectId, classGroupId, date.toString(), totalMarks, createdAt.ms(), updatedAt.ms(),
 )
@@ -337,6 +355,8 @@ internal fun RemarkDto.toEntity() = StudentRemark(registerId, enrollmentId, text
 
 internal fun SubjectDto.toEntity() =
     Subject(id, name, normalizedName, archivedAt?.let(::instant), instant(createdAt), instant(updatedAt))
+
+internal fun SubjectTeacherDto.toEntity() = SubjectTeacher(classGroupId, subjectId, teacherName)
 
 internal fun TestDto.toEntity() = TestRecord(
     id, name, normalizedName, subjectId, classGroupId, date(date), totalMarks, instant(createdAt), instant(updatedAt),
