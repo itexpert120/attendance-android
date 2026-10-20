@@ -39,9 +39,19 @@ android {
     buildTypes {
         release {
             if (releaseStoreFile != null) signingConfig = signingConfigs.getByName("release")
+            // R8: code shrinking, optimization and optimized resource shrinking. Keep rules live in
+            // src/main/keepRules/*.keep; libraries (Room, WorkManager, serialization) ship their own.
             optimization {
-                enable = false
+                enable = true
             }
+        }
+        // The optimized release build, signed with the debug key and installed beside the debug app
+        // (separate application id and data), so R8 output can be tried on a device without the release key.
+        create("releaseCheck") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".check"
+            matchingFallbacks += "release"
         }
     }
     compileOptions {
