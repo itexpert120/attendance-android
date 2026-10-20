@@ -18,13 +18,16 @@ import androidx.compose.material.icons.rounded.Badge
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material3.Icon
@@ -75,6 +78,7 @@ fun SettingsTabScreen(onOpenSchoolSettings: () -> Unit, onOpenStudents: () -> Un
     val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val backup = rememberBackupActions(snackbarHostState)
+    val autoBackup = rememberAutoBackupUi()
     var sheet by rememberSaveable { mutableStateOf(SettingsSheet.NONE) }
     val listState = rememberLazyListState()
     TabReselectEffect(SettingsTab) { listState.animateScrollToItem(0) }
@@ -96,6 +100,7 @@ fun SettingsTabScreen(onOpenSchoolSettings: () -> Unit, onOpenStudents: () -> Un
             onOpenClasses = { sheet = SettingsSheet.CLASSES },
             onOpenSubjects = { sheet = SettingsSheet.SUBJECTS },
             backup = backup,
+            autoBackup = autoBackup,
         )
     }
 
@@ -128,6 +133,7 @@ private fun SettingsContent(
     onOpenClasses: () -> Unit,
     onOpenSubjects: () -> Unit,
     backup: BackupActions,
+    autoBackup: AutoBackupUi,
 ) {
     val school = data?.school
     val haptics = LocalHapticFeedback.current
@@ -252,8 +258,40 @@ private fun SettingsContent(
         item(key = "backup") {
             ListGroup(
                 header = "Backup & restore",
-                footer = "A backup is one file with all your data and photos. Restoring replaces everything on this phone.",
+                footer = BACKUP_FOOTER,
             ) {
+                item {
+                    ListRow(
+                        label = "Automatic backups",
+                        detail = autoBackup.detail,
+                        detailMaxLines = 2,
+                        icon = if (autoBackup.failed) Icons.Rounded.ErrorOutline else Icons.Rounded.Schedule,
+                        destructive = autoBackup.failed,
+                        modifier = Modifier.toggleable(
+                            value = autoBackup.enabled,
+                            role = Role.Switch,
+                            onValueChange = { enabled ->
+                                haptics.performHapticFeedback(
+                                    if (enabled) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff,
+                                )
+                                autoBackup.setEnabled(enabled)
+                            },
+                        ),
+                        trailing = { Switch(checked = autoBackup.enabled, onCheckedChange = null) },
+                    )
+                }
+                item {
+                    ListRow(
+                        label = "Back up now",
+                        detail = AUTO_BACKUP_LOCATION,
+                        icon = Icons.Rounded.Download,
+                        enabled = !autoBackup.backingUpNow,
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                            autoBackup.backUpNow()
+                        },
+                    )
+                }
                 item {
                     ListRow(
                         label = "Back up to a file",
@@ -316,6 +354,14 @@ private fun SchoolLogo(fileName: String?, schoolName: String?) {
         },
     )
 }
+
+/** Where automatic backups go; see AutoBackupStorage. */
+private val AUTO_BACKUP_LOCATION =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) "Saved in Download/Attendance backups" else "Saved in the app's files folder"
+
+private const val BACKUP_FOOTER =
+    "A backup is one file with all your data and photos. Restoring replaces everything on this phone. " +
+        "Automatic backups run once a day while the battery isn't low."
 
 private fun themeLabel(preference: ThemePreference): String = when (preference) {
     ThemePreference.SYSTEM -> "System"

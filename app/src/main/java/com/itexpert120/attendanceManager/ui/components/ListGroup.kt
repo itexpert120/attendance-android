@@ -104,6 +104,7 @@ fun ListRow(
     label: String,
     modifier: Modifier = Modifier,
     detail: String? = null,
+    detailMaxLines: Int = 1,
     value: String? = null,
     icon: ImageVector? = null,
     destructive: Boolean = false,
@@ -154,7 +155,7 @@ fun ListRow(
                     detail,
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = detailMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
