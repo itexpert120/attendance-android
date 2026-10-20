@@ -11,6 +11,7 @@ import com.itexpert120.attendanceManager.data.repo.RegisterRepository
 import com.itexpert120.attendanceManager.data.repo.SettingsRepository
 import com.itexpert120.attendanceManager.data.repo.StudentRepository
 import com.itexpert120.attendanceManager.data.repo.SubjectRepository
+import com.itexpert120.attendanceManager.data.repo.SubjectTeacherRepository
 import com.itexpert120.attendanceManager.data.repo.TestRepository
 import com.itexpert120.attendanceManager.domain.PhoneNormalizer
 import com.itexpert120.attendanceManager.domain.PhotoStore
@@ -43,6 +44,7 @@ class AppContainer(context: Context) {
     val registers: RegisterRepository by lazy { RegisterRepository(database) }
     val subjects: SubjectRepository by lazy { SubjectRepository(database) }
     val tests: TestRepository by lazy { TestRepository(database) }
+    val subjectTeachers: SubjectTeacherRepository by lazy { SubjectTeacherRepository(database) }
     val homework: HomeworkRepository by lazy { HomeworkRepository(database, photoStore) }
 
     /** Called once from [AttendanceApplication.onCreate]; keeps the slow first-use work off the main thread. */

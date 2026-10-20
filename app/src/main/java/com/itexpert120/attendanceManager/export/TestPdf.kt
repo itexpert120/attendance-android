@@ -3,7 +3,14 @@ package com.itexpert120.attendanceManager.export
 import android.graphics.Bitmap
 import com.itexpert120.attendanceManager.data.repo.TestReport
 import com.itexpert120.attendanceManager.data.repo.TestRosterRow
+import com.itexpert120.attendanceManager.domain.ClassAssessment
+import com.itexpert120.attendanceManager.domain.PASS_PERCENT
 import com.itexpert120.attendanceManager.domain.PhotoStore
+import com.itexpert120.attendanceManager.domain.ResultStats
+import com.itexpert120.attendanceManager.domain.StudentReportCard
+import com.itexpert120.attendanceManager.domain.StudentStanding
+import com.itexpert120.attendanceManager.domain.TeacherPerformance
+import com.itexpert120.attendanceManager.domain.isPass
 import com.itexpert120.attendanceManager.domain.dateLabel
 import com.itexpert120.attendanceManager.domain.formatMarks
 import com.itexpert120.attendanceManager.domain.marksPercentage
@@ -17,6 +24,8 @@ import com.itexpert120.attendanceManager.model.TestRecord
 import com.itexpert120.attendanceManager.model.TestResultStatus
 import com.itexpert120.attendanceManager.ui.features.tests.averagePercent
 import com.itexpert120.attendanceManager.ui.features.tests.formatMarkValue
+import com.itexpert120.attendanceManager.ui.features.tests.marksOutOf
+import com.itexpert120.attendanceManager.ui.features.tests.ordinal
 import com.itexpert120.attendanceManager.ui.features.tests.progressLabel
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
@@ -95,7 +104,7 @@ object TestPdf {
         doc.table(
             PdfTable(
                 columns = listOf(
-                    PdfColumn("Admission", width = 70f),
+                    PdfColumn("B-Form", width = 70f),
                     PdfColumn("Roll", width = 44f),
                     PdfColumn("Student name", weight = 1f),
                     PdfColumn("Marks / status", width = 92f, align = PdfAlign.CENTER),
@@ -177,7 +186,7 @@ object TestPdf {
             eyebrow = if (studentMode) "Student report" else "Subject report",
             title = if (studentMode) student?.name ?: "Student report" else subject?.name ?: "All subjects",
             subtitle = if (studentMode) {
-                listOfNotNull(student?.admissionNumber?.takeIf { it.isNotBlank() }, classLine(group, comma = true)).joinToString(" · ")
+                listOfNotNull(student?.admissionNumber?.takeIf { it.isNotBlank() }?.let { "B-Form $it" }, classLine(group, comma = true)).joinToString(" · ")
             } else {
                 group?.let { classLine(it, comma = true) } ?: "All classes"
             },
@@ -251,6 +260,281 @@ object TestPdf {
 
         doc.signatures(listOf("Class incharge signature" to inchargeName(settings)))
         return doc
+    }
+
+    // endregion
+
+    // region Assessment reports (report card, teacher performance, class assessment)
+
+    const val REPORT_CARD_LABEL = "Student Report Card"
+    const val TEACHER_LABEL = "Teacher Performance"
+    const val CLASS_LABEL = "Class Assessment"
+
+    fun reportCardFileName(card: StudentReportCard, group: ClassGroup?, periodLabel: String): String =
+        "Report card ${card.student?.name ?: "Student"} ${classPart(group)} $periodLabel"
+
+    fun teacherFileName(group: ClassGroup?, periodLabel: String): String =
+        "Teacher performance ${group?.let(::classPart) ?: "All classes"} $periodLabel"
+
+    fun classFileName(group: ClassGroup?, periodLabel: String): String = "Class assessment ${classPart(group)} $periodLabel"
+
+    suspend fun loadLogo(settings: SchoolSettings?, photoStore: PhotoStore?): Bitmap? =
+        photoStore?.let { RegisterPdf.loadBitmap(it, settings?.logoFile, 256) }
+
+    /** One student across every Subject: a row per Subject, then each Test, with totals and class rank. */
+    fun buildReportCard(card: StudentReportCard, group: ClassGroup?, periodLabel: String, settings: SchoolSettings?, logo: Bitmap?): PdfDoc {
+        val school = schoolName(settings)
+        val doc = PdfDoc(PageOrientation.PORTRAIT, footerLeft = school, footerRight = REPORT_CARD_LABEL)
+        val student = card.student
+        doc.header(
+            schoolName = school,
+            eyebrow = "Student report card",
+            title = student?.name ?: "Student",
+            subtitle = listOfNotNull(
+                student?.admissionNumber?.takeIf { it.isNotBlank() }?.let { "B-Form $it" },
+                classLine(group, comma = true),
+            ).joinToString(" · "),
+            logo = logo,
+        )
+        periodLine(doc, periodLabel)
+        doc.stats(
+            listOf(
+                "Overall" to (card.percent?.let(::percent) ?: "—"),
+                "Marks" to marksOutOf(card.obtained, card.possible),
+                "Tests" to card.tests.toString(),
+                "Absences" to card.absent.toString(),
+                "Class rank" to (card.rank?.let { "${ordinal(it)} of ${card.rankedCount}" } ?: "—"),
+            ),
+        )
+        doc.sectionTitle("Subjects")
+        doc.table(
+            PdfTable(
+                columns = listOf(
+                    PdfColumn("Subject", weight = 1f),
+                    PdfColumn("Tests", width = 44f, align = PdfAlign.CENTER),
+                    PdfColumn("Absent", width = 48f, align = PdfAlign.CENTER),
+                    PdfColumn("Marks", width = 96f, align = PdfAlign.CENTER),
+                    PdfColumn("Percentage", width = 70f, align = PdfAlign.CENTER),
+                ),
+                rows = card.subjects.map { subject ->
+                    PdfRow(
+                        listOf(
+                            PdfCell(subject.subject?.name ?: "Subject", bold = true),
+                            PdfCell(subject.tests.size.toString()),
+                            PdfCell(subject.absent.toString(), fill = if (subject.absent > 0) PdfColors.AbsentFill else null),
+                            PdfCell(marksOutOf(subject.obtained, subject.possible)),
+                            percentCell(subject.percent),
+                        ),
+                    )
+                },
+                totals = PdfRow(
+                    listOf(
+                        PdfCell("Overall", bold = true),
+                        PdfCell(card.tests.toString(), bold = true),
+                        PdfCell(card.absent.toString(), bold = true),
+                        PdfCell(marksOutOf(card.obtained, card.possible), bold = true),
+                        percentCell(card.percent),
+                    ),
+                ),
+                fontSize = 9f,
+            ),
+        )
+        if (card.subjects.isEmpty()) {
+            doc.text("No test results for this student in this period.", PdfTextStyle(9f, color = PdfColors.Muted))
+        } else {
+            doc.sectionTitle("Tests")
+            doc.table(
+                PdfTable(
+                    columns = listOf(
+                        PdfColumn("Date", width = 66f),
+                        PdfColumn("Subject", width = 96f),
+                        PdfColumn("Test", weight = 1f),
+                        PdfColumn("Marks / status", width = 78f, align = PdfAlign.CENTER),
+                        PdfColumn("Total", width = 44f, align = PdfAlign.CENTER),
+                        PdfColumn("Percentage", width = 66f, align = PdfAlign.CENTER),
+                    ),
+                    rows = card.subjects.flatMap { subject ->
+                        subject.tests.map { line ->
+                            PdfRow(
+                                listOf(
+                                    PdfCell(shortDate(line.test.date)),
+                                    PdfCell(subject.subject?.name ?: "Subject"),
+                                    PdfCell(line.test.name, bold = true),
+                                    resultCell(line.entry.result, line.entry.marks),
+                                    PdfCell(formatMarks(line.test.totalMarks)),
+                                    PdfCell(line.percent?.let(::percent) ?: "—"),
+                                ),
+                            )
+                        }
+                    },
+                    fontSize = 8.5f,
+                ),
+            )
+        }
+        doc.text("Pass mark ${PASS_PERCENT.toInt()}%.", PdfTextStyle(8f, color = PdfColors.Muted))
+        doc.signatures(listOf("Class incharge signature" to inchargeName(settings), "Parent signature" to null))
+        return doc
+    }
+
+    /** Per teacher, each Subject + class they teach with the period's averages and pass rates. */
+    fun buildTeacherReport(
+        teachers: List<TeacherPerformance>,
+        group: ClassGroup?,
+        periodLabel: String,
+        settings: SchoolSettings?,
+        logo: Bitmap?,
+    ): PdfDoc {
+        val school = schoolName(settings)
+        val doc = PdfDoc(PageOrientation.PORTRAIT, footerLeft = school, footerRight = TEACHER_LABEL)
+        doc.header(
+            schoolName = school,
+            eyebrow = "Teacher performance",
+            title = group?.let { classLine(it, comma = true) } ?: "All classes",
+            logo = logo,
+        )
+        periodLine(doc, "$periodLabel · pass mark ${PASS_PERCENT.toInt()}%")
+        if (teachers.isEmpty()) {
+            doc.text("No tests or teacher assignments in this period.", PdfTextStyle(9f, color = PdfColors.Muted))
+        }
+        teachers.forEach { teacher ->
+            doc.sectionTitle(teacher.teacherName ?: "No teacher assigned")
+            doc.table(
+                PdfTable(
+                    columns = listOf(
+                        PdfColumn("Subject", weight = 1f),
+                        PdfColumn("Class", width = 52f),
+                        PdfColumn("Tests", width = 36f, align = PdfAlign.CENTER),
+                        PdfColumn("Average", width = 56f, align = PdfAlign.CENTER),
+                        PdfColumn("Pass rate", width = 56f, align = PdfAlign.CENTER),
+                        PdfColumn("Highest", width = 54f, align = PdfAlign.CENTER),
+                        PdfColumn("Lowest", width = 54f, align = PdfAlign.CENTER),
+                        PdfColumn("Entered", width = 48f, align = PdfAlign.CENTER),
+                        PdfColumn("Not entered", width = 52f, align = PdfAlign.CENTER),
+                    ),
+                    rows = teacher.rows.map { row ->
+                        statsRow(listOf(PdfCell(row.subject?.name ?: "Subject", bold = true), PdfCell(classPart(row.group))), row.stats)
+                    },
+                    totals = statsRow(listOf(PdfCell("Overall", bold = true), PdfCell("")), teacher.overall),
+                    fontSize = 8.5f,
+                ),
+            )
+        }
+        doc.signatures(listOf("Principal signature" to null))
+        return doc
+    }
+
+    /** One class across every Subject: averages and pass rates, top students, students needing attention, ranking. */
+    fun buildClassReport(assessment: ClassAssessment, group: ClassGroup?, periodLabel: String, settings: SchoolSettings?, logo: Bitmap?): PdfDoc {
+        val school = schoolName(settings)
+        val doc = PdfDoc(PageOrientation.PORTRAIT, footerLeft = school, footerRight = CLASS_LABEL)
+        doc.header(schoolName = school, eyebrow = "Class assessment", title = classLine(group, comma = true), logo = logo)
+        periodLine(doc, "$periodLabel · pass mark ${PASS_PERCENT.toInt()}%")
+        val overall = assessment.overall
+        doc.stats(
+            listOf(
+                "Class average" to (overall.averagePercent?.let(::percent) ?: "—"),
+                "Pass rate" to (overall.passRate?.let(::percent) ?: "—"),
+                "Tests" to overall.tests.toString(),
+                "Students" to assessment.standings.size.toString(),
+                "Need attention" to assessment.needsAttention.size.toString(),
+            ),
+        )
+        doc.sectionTitle("Subjects")
+        doc.table(
+            PdfTable(
+                columns = listOf(
+                    PdfColumn("Subject", weight = 1f),
+                    PdfColumn("Tests", width = 40f, align = PdfAlign.CENTER),
+                    PdfColumn("Average", width = 60f, align = PdfAlign.CENTER),
+                    PdfColumn("Pass rate", width = 60f, align = PdfAlign.CENTER),
+                    PdfColumn("Highest", width = 58f, align = PdfAlign.CENTER),
+                    PdfColumn("Lowest", width = 58f, align = PdfAlign.CENTER),
+                    PdfColumn("Not entered", width = 58f, align = PdfAlign.CENTER),
+                ),
+                rows = assessment.subjects.map { subject ->
+                    val s = subject.stats
+                    PdfRow(
+                        listOf(
+                            PdfCell(subject.subject?.name ?: "Subject", bold = true),
+                            PdfCell(s.tests.toString()),
+                            percentCell(s.averagePercent),
+                            PdfCell(s.passRate?.let(::percent) ?: "—"),
+                            PdfCell(s.highestPercent?.let(::percent) ?: "—"),
+                            PdfCell(s.lowestPercent?.let(::percent) ?: "—"),
+                            PdfCell(s.notEntered.toString()),
+                        ),
+                    )
+                },
+                fontSize = 9f,
+            ),
+        )
+        if (assessment.subjects.isEmpty()) {
+            doc.text("No tests for this class in this period.", PdfTextStyle(9f, color = PdfColors.Muted))
+        }
+        if (assessment.topStudents.isNotEmpty()) {
+            doc.sectionTitle("Top students")
+            doc.table(standingsTable(assessment.topStudents))
+        }
+        if (assessment.needsAttention.isNotEmpty()) {
+            doc.sectionTitle("Students needing attention (below ${PASS_PERCENT.toInt()}%)")
+            doc.table(standingsTable(assessment.needsAttention))
+        }
+        if (assessment.standings.isNotEmpty()) {
+            doc.sectionTitle("Class ranking")
+            doc.table(standingsTable(assessment.standings))
+        }
+        doc.signatures(listOf("Class incharge signature" to inchargeName(settings)))
+        return doc
+    }
+
+    private fun periodLine(doc: PdfDoc, text: String) =
+        doc.text(text, PdfTextStyle(10f, bold = true, color = PdfColors.Muted), spacingAfter = 8f)
+
+    private fun statsRow(lead: List<PdfCell>, s: ResultStats): PdfRow = PdfRow(
+        lead + listOf(
+            PdfCell(s.tests.toString()),
+            percentCell(s.averagePercent),
+            PdfCell(s.passRate?.let(::percent) ?: "—"),
+            PdfCell(s.highestPercent?.let(::percent) ?: "—"),
+            PdfCell(s.lowestPercent?.let(::percent) ?: "—"),
+            PdfCell(s.entered.toString()),
+            PdfCell(s.notEntered.toString(), color = if (s.notEntered > 0) null else PdfColors.Muted),
+        ),
+    )
+
+    private fun standingsTable(standings: List<StudentStanding>) = PdfTable(
+        columns = listOf(
+            PdfColumn("Rank", width = 36f, align = PdfAlign.CENTER),
+            PdfColumn("Roll", width = 40f),
+            PdfColumn("Student name", weight = 1f),
+            PdfColumn("B-Form", width = 92f),
+            PdfColumn("Tests", width = 36f, align = PdfAlign.CENTER),
+            PdfColumn("Absent", width = 44f, align = PdfAlign.CENTER),
+            PdfColumn("Marks", width = 84f, align = PdfAlign.CENTER),
+            PdfColumn("Percentage", width = 62f, align = PdfAlign.CENTER),
+        ),
+        rows = standings.map { s ->
+            PdfRow(
+                listOf(
+                    PdfCell(s.rank?.toString() ?: "—", bold = true),
+                    PdfCell(s.rollNumber),
+                    PdfCell(s.student.name, bold = true),
+                    PdfCell(s.student.admissionNumber),
+                    PdfCell(s.tests.toString()),
+                    PdfCell(s.absent.toString(), fill = if (s.absent > 0) PdfColors.AbsentFill else null),
+                    PdfCell(marksOutOf(s.obtained, s.possible)),
+                    percentCell(s.percent),
+                ),
+            )
+        },
+        fontSize = 8.5f,
+    )
+
+    /** A percentage, bold, tinted when below the pass mark. */
+    private fun percentCell(value: Double?): PdfCell = when {
+        value == null -> PdfCell("—", color = PdfColors.Muted)
+        isPass(value) -> PdfCell(percent(value), bold = true)
+        else -> PdfCell(percent(value), bold = true, fill = PdfColors.AbsentFill)
     }
 
     // endregion

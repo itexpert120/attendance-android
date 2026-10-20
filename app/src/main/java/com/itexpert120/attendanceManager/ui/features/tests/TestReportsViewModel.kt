@@ -3,14 +3,15 @@ package com.itexpert120.attendanceManager.ui.features.tests
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.itexpert120.attendanceManager.data.repo.ClassRepository
-import com.itexpert120.attendanceManager.data.repo.StudentRepository
 import com.itexpert120.attendanceManager.data.repo.SubjectRepository
-import com.itexpert120.attendanceManager.data.repo.TestReport
-import com.itexpert120.attendanceManager.data.repo.TestReportFilter
+import com.itexpert120.attendanceManager.data.repo.SubjectTeacherRepository
 import com.itexpert120.attendanceManager.data.repo.TestRepository
+import com.itexpert120.attendanceManager.domain.AssessmentData
+import com.itexpert120.attendanceManager.domain.DateRange
+import com.itexpert120.attendanceManager.domain.sortedClasses
 import com.itexpert120.attendanceManager.model.ClassGroup
-import com.itexpert120.attendanceManager.model.Student
 import com.itexpert120.attendanceManager.model.Subject
+import com.itexpert120.attendanceManager.model.SubjectTeacher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -18,66 +19,44 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-/** The Subjects (archived included, a report can cover them) and Class Groups the pickers offer. */
-data class ReportLookups(val subjects: List<Subject>, val classes: List<ClassGroup>)
-
-/** The Student Report picker's students for one class; [classGroupId] tells a stale list from a fresh one. */
-data class StudentOptions(val classGroupId: Long, val students: List<Student>)
-
-sealed interface ReportState {
-    data object Loading : ReportState
-
-    /** The request has no report yet (a Student Report without a student). */
-    data object Incomplete : ReportState
-
-    data class Ready(val report: TestReport) : ReportState
-}
+/** The Subjects (archived included, a report can cover them), Class Groups and teacher assignments. */
+data class ReportLookups(val subjects: List<Subject>, val classes: List<ClassGroup>, val teachers: List<SubjectTeacher>)
 
 /**
- * Subject and Student Reports. The screen owns the request (saved with `rememberSaveable`) and pushes the
- * resolved filter here with [select]; the report re-computes whenever Tests or results change.
+ * The three test reports. The screen owns the request (saved with `rememberSaveable`) and pushes its date range
+ * here with [select]; [data] re-computes whenever Tests, results or assignments change, and the screen derives
+ * the chosen report from it with the pure functions in `domain/TestAssessments.kt`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TestReportsViewModel(
     tests: TestRepository,
     subjects: SubjectRepository,
     classes: ClassRepository,
-    students: StudentRepository,
+    private val teachers: SubjectTeacherRepository,
 ) : ViewModel() {
-    private val filter = MutableStateFlow<TestReportFilter?>(null)
-    private val studentClass = MutableStateFlow<Long?>(null)
-    private val selected = MutableStateFlow(false)
+    private val range = MutableStateFlow<DateRange?>(null)
 
-    val lookups: StateFlow<ReportLookups?> = combine(subjects.observe(), classes.observeClasses(), ::ReportLookups)
+    val lookups: StateFlow<ReportLookups?> =
+        combine(subjects.observe(), classes.observeClasses(), teachers.observe()) { s, c, t -> ReportLookups(s, c.sortedClasses(), t) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The data for the selected range; a value for an older range may linger briefly, so check its `range`. */
+    val data: StateFlow<AssessmentData?> = range
+        .flatMapLatest { current -> if (current == null) flowOf(null) else tests.observeAssessmentData(current) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    val studentOptions: StateFlow<StudentOptions?> = studentClass
-        .flatMapLatest { classId ->
-            if (classId == null) {
-                flowOf(null)
-            } else {
-                students.observeEnrollmentRows(classId).map { rows -> StudentOptions(classId, studentChoices(rows.map { it.student })) }
-            }
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    fun select(range: DateRange) {
+        this.range.value = range
+    }
 
-    val report: StateFlow<ReportState> = combine(filter, selected) { current, chosen -> current to chosen }
-        .flatMapLatest { (current, chosen) ->
-            when {
-                !chosen -> flowOf(ReportState.Loading)
-                current == null -> flowOf(ReportState.Incomplete)
-                else -> tests.observeReport(current).map { ReportState.Ready(it) }
-            }
+    /** Saves the changed teacher names of one class; returns null on success or the message to show. */
+    suspend fun saveTeachers(classGroupId: Long, names: Map<Long, String>): String? {
+        names.forEach { (subjectId, name) ->
+            val outcome = attempt("Couldn't save the teacher.") { teachers.setTeacher(classGroupId, subjectId, name) }
+            if (outcome is Attempt.Failed) return outcome.message
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportState.Loading)
-
-    /** Shows the report for [filter] (null: incomplete); [studentClassId] loads that class's students for the picker. */
-    fun select(filter: TestReportFilter?, studentClassId: Long?) {
-        this.filter.value = filter
-        studentClass.value = studentClassId
-        selected.value = true
+        return null
     }
 }

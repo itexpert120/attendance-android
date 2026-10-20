@@ -348,7 +348,7 @@ fun FocusEntry(
             RollBadge(row.enrollment.rollNumber, large = true)
             Text(row.student.name, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
             Text(
-                "Admission no. ${row.student.admissionNumber}",
+                "B-Form ${row.student.admissionNumber}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
             )
