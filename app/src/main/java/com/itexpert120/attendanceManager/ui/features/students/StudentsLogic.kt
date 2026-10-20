@@ -2,6 +2,7 @@ package com.itexpert120.attendanceManager.ui.features.students
 
 import com.itexpert120.attendanceManager.data.repo.PhotoChange
 import com.itexpert120.attendanceManager.data.repo.StudentInput
+import com.itexpert120.attendanceManager.domain.BFormNumber
 import com.itexpert120.attendanceManager.domain.isActiveOn
 import com.itexpert120.attendanceManager.domain.shortMonthName
 import com.itexpert120.attendanceManager.model.ClassGroup
@@ -29,13 +30,27 @@ fun classChipLabel(group: ClassGroup): String = "${group.className} · ${group.s
 fun effectiveClassId(classes: List<ClassGroup>, selected: Long?): Long? =
     classes.firstOrNull { it.id == selected }?.id ?: classes.firstOrNull()?.id
 
-/** Whether the row matches a search over the student's name, admission number or roll number. */
+/** Whether the row matches a search over the student's name, B-Form number or roll number. */
 fun EnrollmentRow.matchesQuery(query: String): Boolean {
     val needle = query.trim().lowercase()
     if (needle.isEmpty()) return true
     return student.name.lowercase().contains(needle) ||
-        student.admissionNumber.lowercase().contains(needle) ||
+        bFormMatches(student.admissionNumber, needle) ||
         enrollment.rollNumber.lowercase().contains(needle)
+}
+
+/**
+ * Whether a B-Form number contains [needle] (already lower-cased), typed with or without the dashes:
+ * "12345-12", "1234512" and "34512" all find `12345-1234567-1`.
+ */
+fun bFormMatches(bForm: String, needle: String): Boolean {
+    if (needle.isEmpty()) return true
+    if (bForm.lowercase().contains(needle)) return true
+    val needleDigits = BFormNumber.digits(needle)
+    // Only a search made of digits and separators is compared digit by digit, so "a1" doesn't match "1".
+    return needleDigits.isNotEmpty() &&
+        needle.all { it.isDigit() || it == '-' || it == ' ' } &&
+        BFormNumber.digits(bForm).contains(needleDigits)
 }
 
 /** A class's enrollments after searching and filtering, with the totals the header shows. */
@@ -101,7 +116,7 @@ fun studentsAvailableToAdd(all: List<Student>, rows: List<EnrollmentRow>, query:
     val needle = query.trim().lowercase()
     return all.asSequence()
         .filter { it.id !in enrolled }
-        .filter { needle.isEmpty() || it.name.lowercase().contains(needle) || it.admissionNumber.lowercase().contains(needle) }
+        .filter { needle.isEmpty() || it.name.lowercase().contains(needle) || bFormMatches(it.admissionNumber, needle) }
         .sortedBy { it.name.lowercase() }
         .toList()
 }
@@ -159,7 +174,7 @@ data class StudentFormErrors(
 
         /**
          * Puts a repository `ValidationException` message under the field it is about. The messages are the
-         * PWA's: "Admission number must be unique.", "Roll number is already active in this class.",
+         * PWA's: "B-Form number must be unique.", "Roll number is already active in this class.",
          * "Enter a valid phone number...", "Struck-off date cannot be before admission date." and the
          * "... is required." trio.
          */
@@ -167,7 +182,7 @@ data class StudentFormErrors(
             val text = message.lowercase()
             return when {
                 "phone" in text -> StudentFormErrors(phone = message)
-                "admission number" in text -> StudentFormErrors(admissionNumber = message)
+                "b-form" in text -> StudentFormErrors(admissionNumber = message)
                 "roll number" in text -> StudentFormErrors(rollNumber = message)
                 "struck-off" in text || "struck off" in text -> StudentFormErrors(struckOffOn = message)
                 "name" in text -> StudentFormErrors(name = message)
@@ -177,19 +192,61 @@ data class StudentFormErrors(
     }
 }
 
-/** The checks the form can do before asking the repository (same wording as the repository). */
+/**
+ * The checks the form can do before asking the repository (same wording as the repository). [originalBForm]
+ * is the number the edited student already has: left unchanged, it is accepted even in an older format.
+ */
 fun validateStudentForm(
     name: String,
     admissionNumber: String,
     rollNumber: String,
     admittedOn: LocalDate,
     struckOffOn: LocalDate?,
+    originalBForm: String? = null,
 ): StudentFormErrors = StudentFormErrors(
     name = if (name.isBlank()) "Student name is required." else null,
-    admissionNumber = if (admissionNumber.isBlank()) "Admission number is required." else null,
+    admissionNumber = when {
+        admissionNumber.isBlank() -> BFormNumber.REQUIRED_MESSAGE
+        originalBForm != null && admissionNumber.trim().equals(originalBForm.trim(), ignoreCase = true) -> null
+        BFormNumber.normalize(admissionNumber) == null -> BFormNumber.FORMAT_MESSAGE
+        else -> null
+    },
     rollNumber = if (rollNumber.isBlank()) "Roll number is required." else null,
     struckOffOn = if (struckOffOn != null && struckOffOn < admittedOn) "Struck-off date cannot be before admission date." else null,
 )
+
+/**
+ * Reformats the B-Form field after an edit: [text] as typed, [cursor] where the caret is in it. Returns the
+ * dashed text (`12345-1234567-1`, at most 13 digits) and the caret moved so it stays after the same digit.
+ */
+fun formatBFormEdit(text: String, cursor: Int): Pair<String, Int> {
+    val formatted = BFormNumber.formatPartial(text)
+    val digitsBefore = BFormNumber.digits(text.take(cursor.coerceIn(0, text.length))).length
+    var position = 0
+    var seen = 0
+    while (position < formatted.length && seen < digitsBefore) {
+        if (formatted[position].isDigit()) seen++
+        position++
+    }
+    return formatted to position
+}
+
+/**
+ * The file name a student's photo is saved under in the gallery: "Ayaan S_O Awaan 12345-1234567-1.jpg".
+ * Characters that file systems reject are replaced, and the name is never empty.
+ */
+fun studentPhotoFileName(name: String, bForm: String, extension: String): String {
+    val base = listOf(name.trim(), bForm.trim())
+        .filter { it.isNotEmpty() }
+        .joinToString(" ")
+        .map { if (it.isLetterOrDigit() || it == ' ' || it == '-' || it == '.' || it == '(' || it == ')') it else '_' }
+        .joinToString("")
+        .replace(Regex(" +"), " ")
+        .trim(' ', '.')
+        .take(100)
+        .ifEmpty { "Student photo" }
+    return "$base.${extension.lowercase().ifEmpty { "jpg" }}"
+}
 
 /** The photo edit made in the form; the picked bytes themselves live in the ViewModel. */
 enum class PhotoEdit { KEEP, REMOVE, REPLACE }

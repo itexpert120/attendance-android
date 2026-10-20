@@ -135,10 +135,10 @@ class StudentsLogicTest {
     fun formValidationReportsEachMissingField() {
         val errors = validateStudentForm("  ", "", "", date("2026-04-01"), null)
         assertEquals("Student name is required.", errors.name)
-        assertEquals("Admission number is required.", errors.admissionNumber)
+        assertEquals("B-Form number is required.", errors.admissionNumber)
         assertEquals("Roll number is required.", errors.rollNumber)
         assertTrue(errors.hasErrors)
-        assertFalse(validateStudentForm("Sara", "12", "3", date("2026-04-01"), null).hasErrors)
+        assertFalse(validateStudentForm("Sara", "12345-1234567-1", "3", date("2026-04-01"), null).hasErrors)
     }
 
     @Test
@@ -150,7 +150,7 @@ class StudentsLogicTest {
 
     @Test
     fun repositoryMessagesLandUnderTheirField() {
-        assertEquals("Admission number must be unique.", StudentFormErrors.fromRepositoryMessage("Admission number must be unique.").admissionNumber)
+        assertEquals("B-Form number must be unique.", StudentFormErrors.fromRepositoryMessage("B-Form number must be unique.").admissionNumber)
         assertEquals(
             "Roll number is already active in this class.",
             StudentFormErrors.fromRepositoryMessage("Roll number is already active in this class.").rollNumber,
@@ -188,5 +188,53 @@ class StudentsLogicTest {
         val errors = validateStudentForm("Ayaan", "101", "1", date("2026-05-01"), date("2026-04-30"))
         assertEquals("Struck-off date cannot be before admission date.", errors.struckOffOn)
         assertNull(validateStudentForm("Ayaan", "101", "1", date("2026-05-01"), date("2026-05-01")).struckOffOn)
+    }
+
+    @Test
+    fun formValidationRequiresThirteenDigitBForm() {
+        val message = "B-Form number must have 13 digits (12345-1234567-1)."
+        assertEquals(message, validateStudentForm("Sara", "12345-123", "3", date("2026-04-01"), null).admissionNumber)
+        assertEquals(message, validateStudentForm("Sara", "A-101", "3", date("2026-04-01"), null).admissionNumber)
+        assertNull(validateStudentForm("Sara", "1234512345671", "3", date("2026-04-01"), null).admissionNumber)
+        // An existing student's older number is accepted while it is not changed.
+        assertNull(validateStudentForm("Sara", "A-101", "3", date("2026-04-01"), null, originalBForm = "A-101").admissionNumber)
+        assertEquals(message, validateStudentForm("Sara", "A-102", "3", date("2026-04-01"), null, originalBForm = "A-101").admissionNumber)
+        assertEquals(message, StudentFormErrors.fromRepositoryMessage(message).admissionNumber)
+    }
+
+    @Test
+    fun bFormEditInsertsDashesAndKeepsTheCaretAfterTheSameDigit() {
+        assertEquals("12345" to 5, formatBFormEdit("12345", 5))
+        assertEquals("12345-6" to 7, formatBFormEdit("123456", 6))
+        assertEquals("12345-1234567-1" to 15, formatBFormEdit("1234512345671", 13))
+        // Extra digits are dropped; pasted text with spaces is reformatted.
+        assertEquals("12345-1234567-1" to 15, formatBFormEdit("12345 1234567 199", 17))
+        // A digit typed in the middle: the caret stays right after it.
+        assertEquals("19234-5" to 2, formatBFormEdit("192345", 2))
+        // Deleting the dash puts it back with the caret before it.
+        assertEquals("12345-6" to 5, formatBFormEdit("123456", 5))
+        assertEquals("" to 0, formatBFormEdit("abc", 3))
+    }
+
+    @Test
+    fun searchFindsBFormNumbersWithOrWithoutDashes() {
+        val student = row(enrollment(7, "2026-04-01", rollNumber = "7"), "Zara").let {
+            it.copy(student = it.student.copy(admissionNumber = "35202-1234567-1"))
+        }
+        assertTrue(student.matchesQuery("35202-1234567-1"))
+        assertTrue(student.matchesQuery("3520212345671"))
+        assertTrue(student.matchesQuery("2021234"))
+        assertTrue(student.matchesQuery("35202 1234"))
+        assertFalse(student.matchesQuery("35202-9"))
+        assertFalse(student.matchesQuery("x2021"))
+        val all = listOf(student(8, "Zara", admission = "35202-1234567-1"))
+        assertEquals(listOf("Zara"), studentsAvailableToAdd(all, rows, "3520212").map { it.name })
+    }
+
+    @Test
+    fun photoFileNameUsesNameAndBFormAndIsSafe() {
+        assertEquals("Ayaan S_O Awaan 35202-1234567-1.jpg", studentPhotoFileName("Ayaan S/O Awaan", "35202-1234567-1", "jpg"))
+        assertEquals("Sara.png", studentPhotoFileName(" Sara ", "", "PNG"))
+        assertEquals("Student photo.jpg", studentPhotoFileName("", "", ""))
     }
 }

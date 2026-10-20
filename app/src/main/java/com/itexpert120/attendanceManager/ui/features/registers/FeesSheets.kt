@@ -233,7 +233,7 @@ internal fun StudentFeeSheet(
 
     GuardedSheet(
         title = student.name,
-        description = "Roll ${card.row.enrollment.rollNumber} · Admission ${student.admissionNumber}",
+        description = "Roll ${card.row.enrollment.rollNumber} · B-Form ${student.admissionNumber}",
         dirty = dirty,
         onDismiss = onDismiss,
         modifier = modifier,

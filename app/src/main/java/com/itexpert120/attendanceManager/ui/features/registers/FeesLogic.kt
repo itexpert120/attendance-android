@@ -129,7 +129,7 @@ fun FeeFilter.accepts(status: FeeStatus): Boolean = when (this) {
     FeeFilter.NONE -> status == FeeStatus.NONE
 }
 
-/** Matches name, roll number or admission number, ignoring case and surrounding spaces. */
+/** Matches name, roll number or B-Form number, ignoring case and surrounding spaces. */
 fun List<FeeCard>.filtered(query: String, filter: FeeFilter): List<FeeCard> {
     val needle = query.trim()
     return filter { card ->

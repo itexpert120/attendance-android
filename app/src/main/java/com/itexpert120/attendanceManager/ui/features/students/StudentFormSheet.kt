@@ -53,6 +53,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.itexpert120.attendanceManager.data.files.PickedPhoto
@@ -184,7 +186,10 @@ fun StudentFormSheet(
 
     fun submit() {
         if (form.saving) return
-        val local = validateStudentForm(form.name, form.admissionNumber, form.rollNumber, form.admittedOn, form.struckOffOn)
+        val local = validateStudentForm(
+            form.name, form.admissionNumber, form.rollNumber, form.admittedOn, form.struckOffOn,
+            originalBForm = editing?.student?.admissionNumber,
+        )
         if (local.hasErrors) {
             form.errors = local.copy(phone = form.errors.phone)
             return
@@ -299,10 +304,9 @@ fun StudentFormSheet(
             error = form.errors.name,
             capitalization = KeyboardCapitalization.Words,
         )
-        StudentField(
+        BFormField(
             value = form.admissionNumber,
             onValueChange = { form.admissionNumber = it; form.errors = form.errors.copy(admissionNumber = null) },
-            label = "Admission number",
             error = form.errors.admissionNumber,
         )
         StudentField(
@@ -320,6 +324,7 @@ fun StudentFormSheet(
             supportingText = "Used to call and message the parent. Never printed.",
             error = form.errors.phone,
             keyboardType = KeyboardType.Phone,
+            imeAction = ImeAction.Done,
             onFocusLost = {
                 // Show the number the way it will be stored; flag an invalid one right away.
                 try {
@@ -475,6 +480,43 @@ internal fun StudentField(
                     onFocusLost?.invoke()
                 }
             },
+    )
+}
+
+/**
+ * The B-Form number: a number keypad, with the dashes of `12345-1234567-1` inserted as the digits are typed
+ * (the formatted text is what gets stored). An older value with other characters is shown as it is until
+ * the user edits it.
+ */
+@Composable
+private fun BFormField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    error: String?,
+) {
+    val focus = LocalFocusManager.current
+    var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    if (field.text != value) field = TextFieldValue(value, TextRange(value.length))
+    OutlinedTextField(
+        value = field,
+        onValueChange = { edited ->
+            if (edited.text == field.text) {
+                field = edited // only the caret or selection moved
+            } else {
+                val (text, caret) = formatBFormEdit(edited.text, edited.selection.end)
+                field = TextFieldValue(text, TextRange(caret))
+                onValueChange(text)
+            }
+        },
+        label = { Text("B-Form number") },
+        placeholder = { Text("12345-1234567-1") },
+        supportingText = { Text(error ?: "13 digits from the child's NADRA B-Form.") },
+        isError = error != null,
+        singleLine = true,
+        shape = RoundedCornerShape(12.dp),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+        keyboardActions = KeyboardActions(onNext = { focus.moveFocus(FocusDirection.Down) }),
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 

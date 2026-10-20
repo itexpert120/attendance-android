@@ -89,9 +89,9 @@ fun StudentAvatar(
     }
 }
 
-/** The one-line summary under a student's name: "Roll 12 · Adm. 345". */
+/** The one-line summary under a student's name: "Roll 12 · B-Form 12345-1234567-1". */
 fun studentSummaryLine(row: EnrollmentRow): String =
-    "Roll ${row.enrollment.rollNumber} · Adm. ${row.student.admissionNumber}"
+    "Roll ${row.enrollment.rollNumber} · B-Form ${row.student.admissionNumber}"
 
 /**
  * One student in the class list. Tap opens the details sheet; swipe right to call the parent, swipe left to

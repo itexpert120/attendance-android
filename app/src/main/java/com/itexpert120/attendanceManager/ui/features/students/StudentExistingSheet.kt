@@ -36,7 +36,7 @@ private const val MAX_RESULTS = 25
 
 /**
  * "Add existing student": enrols a student who is already in the school (for example one who was in another
- * class last year) into this class as a new enrollment, keeping their photo, phone and admission number.
+ * class last year) into this class as a new enrollment, keeping their photo, phone and B-Form number.
  */
 @Composable
 fun StudentExistingSheet(
@@ -109,7 +109,7 @@ fun StudentExistingSheet(
             StudentField(
                 value = query,
                 onValueChange = { query = it },
-                label = "Search by name or admission number",
+                label = "Search by name or B-Form number",
                 imeAction = ImeAction.Search,
             )
             when {
@@ -131,7 +131,7 @@ fun StudentExistingSheet(
                     items(candidates.take(MAX_RESULTS)) { student ->
                         ListRow(
                             label = student.name,
-                            detail = "Adm. ${student.admissionNumber}",
+                            detail = "B-Form ${student.admissionNumber}",
                             leading = { StudentAvatar(student.name, student.photoFile, size = 40.dp, textStyle = MaterialTheme.typography.titleSmall) },
                             onClick = { selectedId = student.id },
                         )

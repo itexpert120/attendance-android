@@ -1,14 +1,26 @@
 package com.itexpert120.attendanceManager.ui.features.students
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import com.itexpert120.attendanceManager.ui.components.StoredPhoto
 import androidx.compose.material.icons.rounded.Sms
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -53,6 +65,8 @@ fun StudentDetailSheet(
     val enrollment = row.enrollment
     val struckOff = enrollment.struckOffOn
     val hasPhone = student.phone.isNotBlank()
+    var photoExpanded by rememberSaveable(student.id) { mutableStateOf(false) }
+    val photoSaver = rememberStudentPhotoSaver()
 
     AppSheet(
         title = student.name,
@@ -75,17 +89,55 @@ fun StudentDetailSheet(
             }
         },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            StudentAvatar(
-                name = student.name,
-                photoFile = student.photoFile,
-                size = 72.dp,
-                textStyle = MaterialTheme.typography.headlineSmall,
+        val photoFile = student.photoFile
+        if (photoFile != null && photoExpanded) {
+            // The photo at a readable size; tapping it shrinks it back to the avatar.
+            StoredPhoto(
+                fileName = photoFile,
+                contentDescription = "Photo of ${student.name}. Tap to make it smaller.",
+                contentScale = ContentScale.Fit,
+                maxEdgePx = 1280,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .clickable { photoExpanded = false },
             )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (photoFile == null || !photoExpanded) {
+                StudentAvatar(
+                    name = student.name,
+                    photoFile = photoFile,
+                    size = 72.dp,
+                    textStyle = MaterialTheme.typography.headlineSmall,
+                    modifier = if (photoFile != null) {
+                        Modifier
+                            .clip(CircleShape)
+                            .clickable(onClickLabel = "View photo") { photoExpanded = true }
+                    } else {
+                        Modifier
+                    },
+                )
+            }
             if (struckOff != null) {
                 StatusBadge(struckOffBadgeText(struckOff), tone = BadgeTone.WARNING)
             } else {
                 StatusBadge("On the roll", tone = BadgeTone.SUCCESS)
+            }
+        }
+
+        if (photoFile != null) {
+            ListGroup(header = "Photo") {
+                item {
+                    ListRow(
+                        label = if (photoSaver.isSaving) "Saving photo…" else "Save photo",
+                        detail = "Copies it to the gallery (Pictures/Attendance)",
+                        icon = Icons.Rounded.Download,
+                        enabled = !photoSaver.isSaving,
+                        onClick = { photoSaver.save(student) },
+                    )
+                }
             }
         }
 
@@ -131,7 +183,7 @@ fun StudentDetailSheet(
         }
 
         ListGroup(header = "Details") {
-            item { DetailLine("Admission number", student.admissionNumber) }
+            item { DetailLine("B-Form number", student.admissionNumber) }
             item { DetailLine("Roll number", enrollment.rollNumber) }
             item { DetailLine("Date of birth", student.dateOfBirth?.let(::dateLabel) ?: "Not recorded") }
             item { DetailLine("Admitted on", dateLabel(enrollment.admittedOn)) }
@@ -158,7 +210,7 @@ private fun DetailLinePreview() {
         )
         Column(Modifier.padding(16.dp)) {
             ListGroup(header = "Details") {
-                item { DetailLine("Admission number", row.student.admissionNumber) }
+                item { DetailLine("B-Form number", row.student.admissionNumber) }
                 item { DetailLine("Date of birth", row.student.dateOfBirth?.let(::dateLabel) ?: "Not recorded") }
             }
         }

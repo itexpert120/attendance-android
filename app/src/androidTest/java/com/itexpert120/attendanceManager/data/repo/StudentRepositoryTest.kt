@@ -47,8 +47,11 @@ class StudentRepositoryTest {
 
     private fun date(text: String) = LocalDate.parse(text)
 
+    /** A valid B-Form number, distinct per [n]: bf(101) = "35202-0000101-1". */
+    private fun bf(n: Int) = "35202-" + n.toString().padStart(7, '0') + "-1"
+
     private fun input(
-        admissionNumber: String = "101",
+        admissionNumber: String = bf(101),
         rollNumber: String = "1",
         classGroupId: Long = classA.id,
         name: String = "Ayesha Khan",
@@ -83,13 +86,13 @@ class StudentRepositoryTest {
     @Test
     fun savingANewStudentCreatesStudentAndEnrollment() = runTest {
         val saved = repo.saveStudent(
-            input(name = "  Ayesha Khan ", admissionNumber = " 101 ", rollNumber = " 7 ", phone = " 03001234567 ")
+            input(name = "  Ayesha Khan ", admissionNumber = " 35202 0000101 1 ", rollNumber = " 7 ", phone = " 03001234567 ")
                 .copy(dateOfBirth = date("2015-06-30")),
         )
 
         val student = db.students().getById(saved.studentId)!!
         assertEquals("Ayesha Khan", student.name)
-        assertEquals("101", student.admissionNumber)
+        assertEquals(bf(101), student.admissionNumber)
         assertEquals("03001234567", student.phone)
         assertEquals(date("2015-06-30"), student.dateOfBirth)
         assertEquals(clock.now(), student.createdAt)
@@ -110,27 +113,60 @@ class StudentRepositoryTest {
     }
 
     @Test
-    fun admissionNumberMustBeUniqueIgnoringCase() = runTest {
-        repo.saveStudent(input(admissionNumber = "A-101", rollNumber = "1"))
+    fun bFormNumberMustBeUniqueIgnoringDashes() = runTest {
+        repo.saveStudent(input(admissionNumber = bf(101), rollNumber = "1"))
 
-        assertRejected("Admission number must be unique.") {
-            repo.saveStudent(input(admissionNumber = "a-101", rollNumber = "2"))
+        assertRejected("B-Form number must be unique.") {
+            repo.saveStudent(input(admissionNumber = "3520200001011", rollNumber = "2"))
         }
         assertEquals(1, db.students().getAll().size)
         assertEquals(1, db.enrollments().getForClass(classA.id).size)
     }
 
     @Test
-    fun editingAStudentMayKeepTheirOwnAdmissionNumber() = runTest {
-        val saved = repo.saveStudent(input(admissionNumber = "101", name = "Ayesha"))
+    fun editingAStudentMayKeepTheirOwnBFormNumber() = runTest {
+        val saved = repo.saveStudent(input(admissionNumber = bf(101), name = "Ayesha"))
 
         repo.saveStudent(
-            input(admissionNumber = "101", name = "Ayesha Khan", studentId = saved.studentId, enrollmentId = saved.enrollmentId),
+            input(admissionNumber = bf(101), name = "Ayesha Khan", studentId = saved.studentId, enrollmentId = saved.enrollmentId),
         )
 
         assertEquals("Ayesha Khan", db.students().getById(saved.studentId)!!.name)
         assertEquals(1, db.students().getAll().size)
         assertEquals(1, db.enrollments().getForClass(classA.id).size)
+    }
+
+    @Test
+    fun newBFormNumberMustHaveThirteenDigits() = runTest {
+        assertRejected("B-Form number must have 13 digits (12345-1234567-1).") {
+            repo.saveStudent(input(admissionNumber = "35202-123"))
+        }
+        assertRejected("B-Form number must have 13 digits (12345-1234567-1).") {
+            repo.saveStudent(input(admissionNumber = "A-101"))
+        }
+        assertTrue(db.students().getAll().isEmpty())
+    }
+
+    @Test
+    fun legacyNumberStaysValidWhileUnchangedButAChangeMustBeAValidBForm() = runTest {
+        val now = clock.now()
+        val studentId = db.students().insert(Student(admissionNumber = "A-101", name = "Old", createdAt = now))
+        val enrolled = repo.saveStudent(input(admissionNumber = "A-101", studentId = studentId))
+        repo.saveStudent(input(admissionNumber = "A-101", name = "Old Renamed", studentId = studentId, enrollmentId = enrolled.enrollmentId))
+        assertEquals("A-101", db.students().getById(studentId)!!.admissionNumber)
+
+        assertRejected("B-Form number must have 13 digits (12345-1234567-1).") {
+            repo.saveStudent(input(admissionNumber = "A-102", studentId = studentId, enrollmentId = enrolled.enrollmentId))
+        }
+        repo.saveStudent(input(admissionNumber = "3520200001011", studentId = studentId, enrollmentId = enrolled.enrollmentId))
+        assertEquals(bf(101), db.students().getById(studentId)!!.admissionNumber)
+    }
+
+    @Test
+    fun uniquenessComparesNormalisedNumbersIncludingUndashedLegacyOnes() = runTest {
+        db.students().insert(Student(admissionNumber = "3520200001011", name = "Legacy", createdAt = clock.now()))
+
+        assertRejected("B-Form number must be unique.") { repo.saveStudent(input(admissionNumber = bf(101))) }
     }
 
     @Test
@@ -151,46 +187,46 @@ class StudentRepositoryTest {
 
     @Test
     fun rollNumberCannotBeSharedWithAnActiveEnrollmentInTheSameClass() = runTest {
-        repo.saveStudent(input(admissionNumber = "1", rollNumber = "5"))
+        repo.saveStudent(input(admissionNumber = bf(1), rollNumber = "5"))
 
         assertRejected("Roll number is already active in this class.") {
-            repo.saveStudent(input(admissionNumber = "2", rollNumber = "5"))
+            repo.saveStudent(input(admissionNumber = bf(2), rollNumber = "5"))
         }
     }
 
     @Test
     fun rollNumberConflictIgnoresCase() = runTest {
-        repo.saveStudent(input(admissionNumber = "1", rollNumber = "A1"))
+        repo.saveStudent(input(admissionNumber = bf(1), rollNumber = "A1"))
 
         assertRejected("Roll number is already active in this class.") {
-            repo.saveStudent(input(admissionNumber = "2", rollNumber = "a1"))
+            repo.saveStudent(input(admissionNumber = bf(2), rollNumber = "a1"))
         }
     }
 
     @Test
     fun sameRollNumberInAnotherClassIsAllowed() = runTest {
-        repo.saveStudent(input(admissionNumber = "1", rollNumber = "5"))
+        repo.saveStudent(input(admissionNumber = bf(1), rollNumber = "5"))
 
-        repo.saveStudent(input(admissionNumber = "2", rollNumber = "5", classGroupId = classB.id))
+        repo.saveStudent(input(admissionNumber = bf(2), rollNumber = "5", classGroupId = classB.id))
 
         assertEquals(1, db.enrollments().getForClass(classB.id).size)
     }
 
     @Test
     fun rollNumberCanBeReusedAfterTheEarlierStudentWasStruckOffBeforeAdmission() = runTest {
-        repo.saveStudent(input(admissionNumber = "1", rollNumber = "5", struckOffOn = "2026-06-30"))
+        repo.saveStudent(input(admissionNumber = bf(1), rollNumber = "5", struckOffOn = "2026-06-30"))
 
-        repo.saveStudent(input(admissionNumber = "2", rollNumber = "5", admittedOn = "2026-07-01"))
+        repo.saveStudent(input(admissionNumber = bf(2), rollNumber = "5", admittedOn = "2026-07-01"))
 
         assertEquals(2, db.enrollments().getForClass(classA.id).size)
     }
 
     @Test
     fun rollNumberStaysTakenOnTheStruckOffDayItself() = runTest {
-        repo.saveStudent(input(admissionNumber = "1", rollNumber = "5", struckOffOn = "2026-06-30"))
+        repo.saveStudent(input(admissionNumber = bf(1), rollNumber = "5", struckOffOn = "2026-06-30"))
 
         assertRejected("Roll number is already active in this class.") {
-            repo.saveStudent(input(admissionNumber = "2", rollNumber = "5", admittedOn = "2026-06-30"))
+            repo.saveStudent(input(admissionNumber = bf(2), rollNumber = "5", admittedOn = "2026-06-30"))
         }
     }
 
@@ -286,14 +322,14 @@ class StudentRepositoryTest {
 
     @Test
     fun failedSaveKeepsTheOldPhotoAndDiscardsTheNewOne() = runTest {
-        val first = repo.saveStudent(input(admissionNumber = "1", rollNumber = "1", photo = PhotoChange.Replace(byteArrayOf(1), "image/jpeg")))
+        val first = repo.saveStudent(input(admissionNumber = bf(1), rollNumber = "1", photo = PhotoChange.Replace(byteArrayOf(1), "image/jpeg")))
         val keptFile = db.students().getById(first.studentId)!!.photoFile
-        repo.saveStudent(input(admissionNumber = "2", rollNumber = "2"))
+        repo.saveStudent(input(admissionNumber = bf(2), rollNumber = "2"))
 
-        assertRejected("Admission number must be unique.") {
+        assertRejected("B-Form number must be unique.") {
             repo.saveStudent(
                 input(
-                    admissionNumber = "2",
+                    admissionNumber = bf(2),
                     rollNumber = "1",
                     studentId = first.studentId,
                     enrollmentId = first.enrollmentId,
@@ -304,34 +340,34 @@ class StudentRepositoryTest {
 
         assertEquals(keptFile, db.students().getById(first.studentId)!!.photoFile)
         assertEquals(setOf(keptFile), photos.files.keys)
-        assertEquals("1", db.students().getById(first.studentId)!!.admissionNumber)
+        assertEquals(bf(1), db.students().getById(first.studentId)!!.admissionNumber)
     }
 
     @Test
     fun enrollmentRowsAreSortedByRollNumberNaturally() = runTest {
-        repo.saveStudent(input(admissionNumber = "1", rollNumber = "10"))
-        repo.saveStudent(input(admissionNumber = "2", rollNumber = "2"))
-        repo.saveStudent(input(admissionNumber = "3", rollNumber = "1"))
-        repo.saveStudent(input(admissionNumber = "4", rollNumber = "7", classGroupId = classB.id))
+        repo.saveStudent(input(admissionNumber = bf(1), rollNumber = "10"))
+        repo.saveStudent(input(admissionNumber = bf(2), rollNumber = "2"))
+        repo.saveStudent(input(admissionNumber = bf(3), rollNumber = "1"))
+        repo.saveStudent(input(admissionNumber = bf(4), rollNumber = "7", classGroupId = classB.id))
 
         val rows = repo.observeEnrollmentRows(classA.id).first()
 
         assertEquals(listOf("1", "2", "10"), rows.map { it.enrollment.rollNumber })
-        assertEquals(listOf("3", "2", "1"), rows.map { it.student.admissionNumber })
+        assertEquals(listOf(bf(3), bf(2), bf(1)), rows.map { it.student.admissionNumber })
     }
 
     @Test
     fun observeStudentsListsEveryStudent() = runTest {
-        repo.saveStudent(input(admissionNumber = "1", rollNumber = "1"))
-        repo.saveStudent(input(admissionNumber = "2", rollNumber = "1", classGroupId = classB.id))
+        repo.saveStudent(input(admissionNumber = bf(1), rollNumber = "1"))
+        repo.saveStudent(input(admissionNumber = bf(2), rollNumber = "1", classGroupId = classB.id))
 
-        assertEquals(setOf("1", "2"), repo.observeStudents().first().map { it.admissionNumber }.toSet())
+        assertEquals(setOf(bf(1), bf(2)), repo.observeStudents().first().map { it.admissionNumber }.toSet())
     }
 
     @Test
     fun requiredFieldsAreChecked() = runTest {
         assertRejected("Student name is required.") { repo.saveStudent(input(name = " ")) }
-        assertRejected("Admission number is required.") { repo.saveStudent(input(admissionNumber = "")) }
+        assertRejected("B-Form number is required.") { repo.saveStudent(input(admissionNumber = "")) }
         assertRejected("Roll number is required.") { repo.saveStudent(input(rollNumber = " ")) }
     }
 

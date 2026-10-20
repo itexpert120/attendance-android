@@ -385,7 +385,7 @@ private fun FeeCardItem(card: FeeCard, currency: String, onClick: () -> Unit) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(student.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(
-                        "Admission ${student.admissionNumber}",
+                        "B-Form ${student.admissionNumber}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
