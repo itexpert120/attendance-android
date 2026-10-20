@@ -65,8 +65,8 @@ abstract class AttendanceDatabase : RoomDatabase() {
     companion object {
         const val FILE_NAME = "attendance.db"
 
-        fun create(context: Context): AttendanceDatabase =
-            Room.databaseBuilder<AttendanceDatabase>(context.applicationContext, FILE_NAME)
+        fun create(context: Context, fileName: String = FILE_NAME): AttendanceDatabase =
+            Room.databaseBuilder<AttendanceDatabase>(context.applicationContext, fileName)
                 .setDriver(BundledSQLiteDriver())
                 .addMigrations(MIGRATION_1_2)
                 .build()
