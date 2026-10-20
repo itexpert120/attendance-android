@@ -2,6 +2,7 @@ package com.itexpert120.attendanceManager.data.repo
 
 import androidx.room3.withWriteTransaction
 import com.itexpert120.attendanceManager.data.db.AttendanceDatabase
+import com.itexpert120.attendanceManager.domain.BFormNumber
 import com.itexpert120.attendanceManager.domain.PhoneNormalizer
 import com.itexpert120.attendanceManager.domain.PhotoStore
 import com.itexpert120.attendanceManager.domain.ValidationException
@@ -51,19 +52,24 @@ class StudentRepository(
 
     /**
      * Creates or updates a student and one enrollment atomically. Throws [ValidationException] with the
-     * PWA's messages: an invalid phone, "Admission number must be unique.", "Roll number is already active
+     * PWA's messages: an invalid phone, "B-Form number must be unique.", "Roll number is already active
      * in this class." (another enrollment of the class with that roll number that was not struck off before
      * [StudentInput.admittedOn]) and "Struck-off date cannot be before admission date.".
+     *
+     * [StudentInput.admissionNumber] is the B-Form number: a new student, or a changed number, must have 13
+     * digits (with or without dashes) and is stored as `12345-1234567-1`; an existing student's unchanged
+     * number is kept as it is, so records from before the rule can still be edited. Duplicates are found by
+     * comparing the normalised numbers.
      *
      * A replaced or removed photo file is deleted only after the transaction commits; a photo saved for a
      * save that fails is deleted again.
      */
     suspend fun saveStudent(input: StudentInput): SavedStudent {
-        val admissionNumber = input.admissionNumber.trim()
+        val typedBForm = input.admissionNumber.trim()
         val rollNumber = input.rollNumber.trim()
         val name = input.name.trim()
         if (name.isEmpty()) throw ValidationException("Student name is required.")
-        if (admissionNumber.isEmpty()) throw ValidationException("Admission number is required.")
+        if (typedBForm.isEmpty()) throw ValidationException(BFormNumber.REQUIRED_MESSAGE)
         if (rollNumber.isEmpty()) throw ValidationException("Roll number is required.")
         require(input.studentId != null || input.enrollmentId == null) {
             "An enrollment can only be edited together with its student."
@@ -84,9 +90,16 @@ class StudentRepository(
                         ?: throw ValidationException("Enrollment not found.")
                 }
 
+                val keepsLegacyNumber = existing != null && existing.admissionNumber.trim().equals(typedBForm, ignoreCase = true)
+                val admissionNumber = if (keepsLegacyNumber) {
+                    existing.admissionNumber
+                } else {
+                    BFormNumber.normalize(typedBForm) ?: throw ValidationException(BFormNumber.FORMAT_MESSAGE)
+                }
                 val sameAdmission = students.findByAdmissionNumber(admissionNumber)
+                    ?: if (keepsLegacyNumber) null else students.getAll().firstOrNull { BFormNumber.sameNumber(it.admissionNumber, admissionNumber) }
                 if (sameAdmission != null && sameAdmission.id != existing?.id) {
-                    throw ValidationException("Admission number must be unique.")
+                    throw ValidationException(BFormNumber.DUPLICATE_MESSAGE)
                 }
                 val rollConflicts = enrollments.countRollNumberConflicts(
                     classGroupId = input.classGroupId,

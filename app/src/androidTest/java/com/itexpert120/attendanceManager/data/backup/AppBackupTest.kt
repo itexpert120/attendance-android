@@ -194,7 +194,7 @@ class AppBackupTest {
         val ayesha = students.saveStudent(
             StudentInput(
                 classGroupId = classId,
-                admissionNumber = "A-001",
+                admissionNumber = "35202-0000001-1",
                 rollNumber = "1",
                 name = "Ayesha",
                 phone = "03001234567",
@@ -204,7 +204,7 @@ class AppBackupTest {
             ),
         ).enrollmentId
         val bilal = students.saveStudent(
-            StudentInput(classId, "A-002", "2", "Bilal", "", LocalDate(2026, 8, 1)),
+            StudentInput(classId, "35202-0000002-1", "2", "Bilal", "", LocalDate(2026, 8, 1)),
         ).enrollmentId
 
         val registers = RegisterRepository(db, clock, TimeZone.UTC)
@@ -248,7 +248,7 @@ class AppBackupTest {
         StudentRepository(target, targetPhotos, FakePhoneNormalizer(), clock).saveStudent(
             StudentInput(
                 classGroupId = classId,
-                admissionNumber = "OLD-1",
+                admissionNumber = "35202-9999999-1",
                 rollNumber = "1",
                 name = "Old Student",
                 phone = "",

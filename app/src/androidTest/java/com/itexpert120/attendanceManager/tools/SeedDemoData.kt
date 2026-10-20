@@ -78,7 +78,7 @@ class SeedDemoData {
             val saved = container.students.saveStudent(
                 StudentInput(
                     classGroupId = classA.id,
-                    admissionNumber = "A-${1001 + index}",
+                    admissionNumber = "35202-" + (1001 + index).toString().padStart(7, '0') + "-1",
                     rollNumber = "${index + 1}",
                     name = "$first $last",
                     phone = if (index % 7 == 6) "" else "+92300123${(4000 + index).toString().padStart(4, '0')}",

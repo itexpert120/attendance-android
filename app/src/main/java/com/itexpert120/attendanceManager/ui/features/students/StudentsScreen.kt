@@ -460,7 +460,7 @@ private fun StudentSearchField(query: String, onQueryChange: (String) -> Unit, m
         onValueChange = onQueryChange,
         singleLine = true,
         shape = CircleShape,
-        placeholder = { Text("Search name, roll or admission no.", maxLines = 1) },
+        placeholder = { Text("Search name, roll or B-Form no.", maxLines = 1) },
         leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
         trailingIcon = {
             if (query.isNotEmpty()) {
@@ -507,7 +507,7 @@ private fun StudentList(
                 EmptyState(
                     icon = Icons.Rounded.Groups,
                     title = "No students in ${classLabel(group)}",
-                    text = "Add students with their admission and roll numbers, or enrol students who are already in the school.",
+                    text = "Add students with their B-Form and roll numbers, or enrol students who are already in the school.",
                     action = {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Button(onClick = onAddStudent) { Text("Add student") }
@@ -521,7 +521,7 @@ private fun StudentList(
                 EmptyState(
                     icon = Icons.Rounded.SearchOff,
                     title = "No students match “${state.query.trim()}”",
-                    text = "Check the spelling, or search by roll number or admission number.",
+                    text = "Check the spelling, or search by roll number or B-Form number.",
                     action = { TextButton(onClick = onClearSearch) { Text("Clear search") } },
                 )
             }
