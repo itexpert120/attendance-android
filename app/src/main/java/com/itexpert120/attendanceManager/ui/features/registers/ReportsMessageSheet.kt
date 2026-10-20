@@ -55,7 +55,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.itexpert120.attendanceManager.data.repo.AbsenceMessageRecipient
 import com.itexpert120.attendanceManager.data.repo.absenceMessageRecipients
-import com.itexpert120.attendanceManager.data.repo.absenceSessionLabel
+
 import com.itexpert120.attendanceManager.domain.ReportPeriodType
 import com.itexpert120.attendanceManager.model.AttendanceMark
 import com.itexpert120.attendanceManager.model.AttendanceStatus
@@ -213,7 +213,7 @@ internal fun ReportsRecipientCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        "Absent ${absenceSessionLabel(recipient.student.absentSessions)}",
+                        "Absent for the day",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -318,7 +318,6 @@ private fun ReportsRecipientCardPreview() {
         monthRows = rows,
         marks = base.marks + listOf(
             AttendanceMark(1, 2, 6, Session.FIRST, AttendanceStatus.ABSENT),
-            AttendanceMark(1, 2, 6, Session.SECOND, AttendanceStatus.ABSENT),
             AttendanceMark(1, 3, 6, Session.FIRST, AttendanceStatus.ABSENT),
         ),
     )

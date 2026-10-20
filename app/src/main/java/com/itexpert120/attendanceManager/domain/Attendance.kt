@@ -7,7 +7,7 @@ import com.itexpert120.attendanceManager.model.Register
 import com.itexpert120.attendanceManager.model.Session
 
 /*
- * Attendance is counted in whole sessions. Attendance is now taken once a day, so a session is a day;
+ * Attendance is taken once a day and stored as [Session.FIRST]; a "session" count is a count of days.
  * [sessionsToDays] stays as the single place that converts counts for display.
  */
 
@@ -32,7 +32,7 @@ fun mergeTimings(marks: List<AttendanceMark>): List<AttendanceMark> {
 
 fun sessionsToDays(sessions: Int): Double = sessions.toDouble() / SESSIONS_PER_DAY
 
-/** Sessions marked present, optionally for a single enrollment. */
+/** Days marked present, optionally for a single enrollment. */
 fun presentSessions(marks: List<AttendanceMark>, registerId: Long, enrollmentId: Long? = null): Int =
     marks.count {
         it.registerId == registerId &&
@@ -49,7 +49,7 @@ fun presentSessionsByEnrollment(marks: List<AttendanceMark>, registerIds: Set<Lo
     return totals
 }
 
-/** Present sessions in earlier months of the same academic year and class: the register's "brought forward". */
+/** Present days in earlier months of the same academic year and class: the register's "brought forward". */
 fun broughtForwardSessions(
     marks: List<AttendanceMark>,
     registers: List<Register>,
@@ -115,8 +115,8 @@ data class AttendanceReportStudent(
     val absent: Int,
     val leave: Int,
     val unmarked: Int,
-    /** Which sessions were missed; only filled for daily reports, where the parent message needs it. */
-    val absentSessions: List<Session>,
+    /** Whether the student was absent on the report's day; only set for daily reports. */
+    val absentOnDay: Boolean,
 )
 
 data class AttendanceReport(
@@ -128,12 +128,12 @@ data class AttendanceReport(
     val unmarked: Int,
     val students: List<AttendanceReportStudent>,
 ) {
-    /** Sessions that could have been marked: present + absent + leave + unmarked. */
+    /** Days that could have been marked: present + absent + leave + unmarked. */
     val possible: Int get() = present + absent + leave + unmarked
 }
 
 /**
- * Counts present, absent, leave and unmarked sessions per student over the report period. Holidays
+ * Counts present, absent, leave and unmarked days per student over the report period. Holidays
  * and days outside a student's enrollment are skipped entirely, so they count as neither possible nor
  * unmarked.
  */
@@ -147,30 +147,31 @@ fun attendanceReport(
 ): AttendanceReport {
     val period = reportPeriod(register, type, selectedDay)
     val statusByCell = marks
-        .filter { it.registerId == register.id }
-        .associate { Triple(it.enrollmentId, it.day, it.session) to it.status }
+        .filter { it.registerId == register.id && it.session == Session.FIRST }
+        .associate { (it.enrollmentId to it.day) to it.status }
 
     val students = rows.map { row ->
         var present = 0
         var absent = 0
         var leave = 0
         var unmarked = 0
-        val absentSessions = mutableListOf<Session>()
         for (day in period.startDay..period.endDay) {
             if (isHolidayDay(register, day, holidayDays) || !row.enrollment.isActiveOn(register.dateOf(day))) continue
-            for (session in Session.entries) {
-                when (statusByCell[Triple(row.enrollment.id, day, session)]) {
-                    AttendanceStatus.PRESENT -> present++
-                    AttendanceStatus.ABSENT -> {
-                        absent++
-                        if (type == ReportPeriodType.DAILY) absentSessions += session
-                    }
-                    AttendanceStatus.LEAVE -> leave++
-                    null -> unmarked++
-                }
+            when (statusByCell[row.enrollment.id to day]) {
+                AttendanceStatus.PRESENT -> present++
+                AttendanceStatus.ABSENT -> absent++
+                AttendanceStatus.LEAVE -> leave++
+                null -> unmarked++
             }
         }
-        AttendanceReportStudent(row, present, absent, leave, unmarked, absentSessions)
+        AttendanceReportStudent(
+            row = row,
+            present = present,
+            absent = absent,
+            leave = leave,
+            unmarked = unmarked,
+            absentOnDay = type == ReportPeriodType.DAILY && absent > 0,
+        )
     }
 
     return AttendanceReport(

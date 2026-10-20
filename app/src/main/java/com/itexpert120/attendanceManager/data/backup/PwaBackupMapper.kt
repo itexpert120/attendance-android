@@ -2,6 +2,7 @@ package com.itexpert120.attendanceManager.data.backup
 
 import com.itexpert120.attendanceManager.domain.PhoneNormalizer
 import com.itexpert120.attendanceManager.domain.ValidationException
+import com.itexpert120.attendanceManager.domain.mergeTimings
 import com.itexpert120.attendanceManager.model.AttendanceMark
 import com.itexpert120.attendanceManager.model.AttendanceStatus
 import com.itexpert120.attendanceManager.model.ClassGroup
@@ -122,7 +123,7 @@ object DataUrls {
  * are unusable, or that would violate a unique constraint are skipped; rows that are fine apart from one
  * field (a bad timestamp, an unparsable birth date) are kept with that field repaired. Duplicate parents
  * (same class and section, same subject name, same register month) are merged, so their children survive
- * under the first one; two students sharing an admission number are both kept, the later one's number gets
+ * under the first one; two students sharing a B-Form number are both kept, the later one's number gets
  * a " (2)" style suffix. Every such decision is reported through the warnings.
  */
 class PwaBackupMapper(
@@ -249,7 +250,7 @@ class PwaBackupMapper(
             if (!admissionsTaken.add(asciiLower(admission))) {
                 var n = 2
                 while (!admissionsTaken.add(asciiLower("$admission ($n)"))) n++
-                log.add(PwaTables.STUDENTS, "admission number is already used by another student, renamed to \"$admission ($n)\"", label)
+                log.add(PwaTables.STUDENTS, "B-Form number is already used by another student, renamed to \"$admission ($n)\"", label)
                 admission = "$admission ($n)"
             }
             val dob = if (s.dateOfBirth.isNullOrBlank()) {
@@ -603,7 +604,8 @@ class PwaBackupMapper(
             subjects = subjects,
             enrollments = enrollments,
             registers = registers,
-            attendance = attendance,
+            // The web app took two timings a day; the app stores one mark per day (Present wins, then Leave).
+            attendance = mergeTimings(attendance),
             holidays = holidays,
             feeEntries = feeEntries,
             installmentMeta = installmentMeta,

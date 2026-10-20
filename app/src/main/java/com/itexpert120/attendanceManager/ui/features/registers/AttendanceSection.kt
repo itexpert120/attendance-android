@@ -33,8 +33,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.itexpert120.attendanceManager.LocalAppContainer
 import com.itexpert120.attendanceManager.data.repo.RegisterData
 import com.itexpert120.attendanceManager.model.AttendanceStatus
-import com.itexpert120.attendanceManager.model.Session
+import com.itexpert120.attendanceManager.model.EnrollmentRow
 import com.itexpert120.attendanceManager.ui.components.SegmentedChoice
+import com.itexpert120.attendanceManager.ui.features.students.ContactAction
+import com.itexpert120.attendanceManager.ui.features.students.StudentDetailSheet
+import com.itexpert120.attendanceManager.ui.features.students.launchContact
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
@@ -44,8 +50,8 @@ private const val WIDE_WINDOW_DP = 840
 
 /**
  * Day-first attendance marking for one register: a date strip, the student list for the selected day with
- * two tap-to-cycle timing buttons per student, a counts and bulk-actions bar, holidays, and a Month mode
- * with a per-student heat strip.
+ * one tap-to-cycle mark button per student (tapping the name opens the profile), a counts and bulk-actions
+ * bar, holidays, and a Month mode with a per-student heat strip.
  */
 @Composable
 fun AttendanceSection(data: RegisterData, modifier: Modifier = Modifier, onOpenStudents: (() -> Unit)? = null) {
@@ -59,6 +65,7 @@ fun AttendanceSection(data: RegisterData, modifier: Modifier = Modifier, onOpenS
     var selectedDay by rememberSaveable(registerId) { mutableIntStateOf(defaultSelectedDay(data.register, today)) }
     var showHolidaySheet by rememberSaveable { mutableStateOf(false) }
     var openStudentId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var profileStudentId by rememberSaveable { mutableStateOf<Long?>(null) }
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(viewModel) {
@@ -77,9 +84,10 @@ fun AttendanceSection(data: RegisterData, modifier: Modifier = Modifier, onOpenS
     val latestData by rememberUpdatedState(data)
     val actions = remember(viewModel, day, registerId) {
         AttendanceRowActions(
-            onSetMark = { enrollmentId, session, status -> viewModel.setMark(registerId, enrollmentId, day, session, status) },
+            onSetMark = { enrollmentId, status -> viewModel.setMark(registerId, enrollmentId, day, status) },
             onSwipeAbsent = { enrollmentId, name -> viewModel.markAbsent(latestData, enrollmentId, name, day) },
             onBlocked = viewModel::post,
+            onOpenProfile = { profileStudentId = it },
         )
     }
 
@@ -92,7 +100,7 @@ fun AttendanceSection(data: RegisterData, modifier: Modifier = Modifier, onOpenS
         onSelectDay = { selectedDay = it },
         snackbar = snackbar,
         actions = actions,
-        onBulk = { sessions, status -> viewModel.bulk(latestData, day, sessions, status) },
+        onBulk = { status -> viewModel.bulk(latestData, day, status) },
         onOpenStudents = onOpenStudents,
         onFillBlanks = { viewModel.fillBlanksPresent(latestData, day) },
         onDeclareHoliday = { showHolidaySheet = true },
@@ -114,7 +122,25 @@ fun AttendanceSection(data: RegisterData, modifier: Modifier = Modifier, onOpenS
     }
     openStudentId?.let { id ->
         val row = data.attendanceRows.firstOrNull { it.enrollment.id == id }
-        if (row != null) AttendanceStudentMonthSheet(data, row, onDismiss = { openStudentId = null })
+        if (row != null) {
+            AttendanceStudentMonthSheet(
+                data = data,
+                row = row,
+                onDismiss = { openStudentId = null },
+                onOpenProfile = {
+                    openStudentId = null
+                    profileStudentId = id
+                },
+            )
+        }
+    }
+    profileStudentId?.let { id ->
+        val row = data.monthRows.firstOrNull { it.enrollment.id == id }
+        if (row != null) {
+            AttendanceStudentProfileSheet(row, onMessage = viewModel::post, onDismiss = { profileStudentId = null })
+        } else {
+            profileStudentId = null
+        }
     }
 }
 
@@ -129,7 +155,7 @@ internal fun AttendanceContent(
     onSelectDay: (Int) -> Unit,
     snackbar: SnackbarHostState,
     actions: AttendanceRowActions,
-    onBulk: (List<Session>, AttendanceStatus?) -> Unit,
+    onBulk: (AttendanceStatus?) -> Unit,
     onOpenStudents: (() -> Unit)?,
     onFillBlanks: () -> Unit,
     onDeclareHoliday: () -> Unit,
@@ -177,9 +203,9 @@ internal fun AttendanceContent(
                     AttendanceBottomBar(
                         counts = counts,
                         canDeclareHoliday = info.canToggleHoliday,
-                        onBulk = { sessions, status -> onBulk(sessions, status) },
+                        onBulk = { status -> onBulk(status) },
                         onFillBlanks = onFillBlanks,
-                        onClear = { onBulk(it, null) },
+                        onClear = { onBulk(null) },
                         onDeclareHoliday = onDeclareHoliday,
                         modifier = Modifier.widthIn(max = 720.dp),
                     )
@@ -246,8 +272,7 @@ private fun AttendanceDayPane(
                         roll = row.enrollment.rollNumber,
                         name = row.student.name,
                         photoFile = row.student.photoFile,
-                        first = data.statusOf(id, selectedDay, Session.FIRST),
-                        second = data.statusOf(id, selectedDay, Session.SECOND),
+                        status = data.statusOf(id, selectedDay),
                         editable = info.canMark && onRoll,
                         blockedMessage = if (onRoll) explanation.orEmpty() else "${row.student.name} was not on the roll on this date.",
                         subtitle = dayRowSubtitle(data, row, selectedDay),
@@ -258,4 +283,37 @@ private fun AttendanceDayPane(
             }
         }
     }
+}
+
+/**
+ * The student's profile, opened read-only from the register: no edit or roll actions, but Call, SMS and
+ * WhatsApp work as on the Students screen.
+ */
+@Composable
+private fun AttendanceStudentProfileSheet(row: EnrollmentRow, onMessage: (String) -> Unit, onDismiss: () -> Unit) {
+    val container = LocalAppContainer.current
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val phone = row.student.phone
+    StudentDetailSheet(
+        row = row,
+        phoneDisplay = remember(phone) { container.phoneNormalizer.display(phone) },
+        onContact = { action ->
+            when {
+                phone.isBlank() -> onMessage("${row.student.name} has no phone number saved.")
+                launchContact(context, action, phone) -> haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                else -> onMessage(
+                    when (action) {
+                        ContactAction.CALL -> "No phone app available."
+                        ContactAction.SMS -> "No messaging app available."
+                        ContactAction.WHATSAPP -> "WhatsApp isn't available on this device."
+                    },
+                )
+            }
+        },
+        onEdit = null,
+        onStrikeOff = null,
+        onRestore = null,
+        onDismiss = onDismiss,
+    )
 }

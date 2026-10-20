@@ -9,7 +9,6 @@ import com.itexpert120.attendanceManager.domain.shortWeekdayName
 import com.itexpert120.attendanceManager.model.AttendanceStatus
 import com.itexpert120.attendanceManager.model.EnrollmentRow
 import com.itexpert120.attendanceManager.model.Register
-import com.itexpert120.attendanceManager.model.Session
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
 
@@ -18,7 +17,7 @@ import kotlinx.datetime.number
  * order, the live counts and the month heat strip. Nothing here touches Compose or Android.
  */
 
-/** Tap-to-cycle order of one timing: not marked, present, absent, leave, then back to not marked. */
+/** Tap-to-cycle order of a day's mark: not marked, present, absent, leave, then back to not marked. */
 internal fun nextAttendanceStatus(current: AttendanceStatus?): AttendanceStatus? = when (current) {
     null -> AttendanceStatus.PRESENT
     AttendanceStatus.PRESENT -> AttendanceStatus.ABSENT
@@ -129,45 +128,40 @@ internal fun dayRowSubtitle(data: RegisterData, row: EnrollmentRow, day: Int): S
     val id = row.enrollment.id
     val month = data.presentSessionsOf(id)
     val total = month + data.broughtForwardOf(id)
-    return "Roll ${row.enrollment.rollNumber} · Month ${formatSessionsAsDays(month)} · Total ${formatSessionsAsDays(total)}"
+    return "Roll ${row.enrollment.rollNumber} · Month ${formatDays(month)} · Total ${formatDays(total)}"
 }
 
-internal data class SessionCounts(val present: Int, val absent: Int, val leave: Int, val unmarked: Int) {
+internal data class DayCounts(val present: Int, val absent: Int, val leave: Int, val unmarked: Int) {
     val total: Int get() = present + absent + leave + unmarked
 }
 
-/** Live counts per timing for the day bar, over the students on the roll that day. */
-internal fun dayCounts(data: RegisterData, day: Int): Map<Session, SessionCounts> {
-    val rows = activeRowsOn(data, day)
-    return Session.entries.associateWith { session ->
-        var present = 0
-        var absent = 0
-        var leave = 0
-        var unmarked = 0
-        for (row in rows) {
-            when (data.statusOf(row.enrollment.id, day, session)) {
-                AttendanceStatus.PRESENT -> present++
-                AttendanceStatus.ABSENT -> absent++
-                AttendanceStatus.LEAVE -> leave++
-                null -> unmarked++
-            }
+/** Live counts for the day bar, over the students on the roll that day. */
+internal fun dayCounts(data: RegisterData, day: Int): DayCounts {
+    var present = 0
+    var absent = 0
+    var leave = 0
+    var unmarked = 0
+    for (row in activeRowsOn(data, day)) {
+        when (data.statusOf(row.enrollment.id, day)) {
+            AttendanceStatus.PRESENT -> present++
+            AttendanceStatus.ABSENT -> absent++
+            AttendanceStatus.LEAVE -> leave++
+            null -> unmarked++
         }
-        SessionCounts(present, absent, leave, unmarked)
     }
+    return DayCounts(present, absent, leave, unmarked)
 }
 
 /** One mark as it was before an action, so the action can be undone. */
-internal data class MarkChange(val enrollmentId: Long, val session: Session, val previous: AttendanceStatus?)
+internal data class MarkChange(val enrollmentId: Long, val previous: AttendanceStatus?)
 
-/** The current marks of every student on the roll for the given timings. */
-internal fun snapshotMarks(data: RegisterData, day: Int, sessions: Collection<Session>): List<MarkChange> =
-    activeRowsOn(data, day).flatMap { row ->
-        sessions.map { MarkChange(row.enrollment.id, it, data.statusOf(row.enrollment.id, day, it)) }
-    }
+/** The current mark of every student on the roll that day. */
+internal fun snapshotMarks(data: RegisterData, day: Int): List<MarkChange> =
+    activeRowsOn(data, day).map { row -> MarkChange(row.enrollment.id, data.statusOf(row.enrollment.id, day)) }
 
-/** Cells that are blank in the given timings, for "fill blanks as present". */
+/** Students not yet marked that day, for "fill blanks as present". */
 internal fun blankCells(data: RegisterData, day: Int): List<MarkChange> =
-    snapshotMarks(data, day, Session.entries).filter { it.previous == null }
+    snapshotMarks(data, day).filter { it.previous == null }
 
 /** What a day looks like in a student's month heat strip. */
 internal enum class HeatKind { NO_SCHOOL, HOLIDAY, OFF_ROLL, SCHOOL }
@@ -175,8 +169,7 @@ internal enum class HeatKind { NO_SCHOOL, HOLIDAY, OFF_ROLL, SCHOOL }
 internal data class HeatCell(
     val day: Int,
     val kind: HeatKind,
-    val first: AttendanceStatus?,
-    val second: AttendanceStatus?,
+    val status: AttendanceStatus?,
 )
 
 internal fun heatCells(data: RegisterData, row: EnrollmentRow): List<HeatCell> =
@@ -184,32 +177,25 @@ internal fun heatCells(data: RegisterData, row: EnrollmentRow): List<HeatCell> =
         val date = data.register.dateOf(day)
         val declared = day in data.holidayDays
         when {
-            declared -> HeatCell(day, HeatKind.HOLIDAY, null, null)
-            isWeekend(date) -> HeatCell(day, HeatKind.NO_SCHOOL, null, null)
-            !row.enrollment.isActiveOn(date) -> HeatCell(day, HeatKind.OFF_ROLL, null, null)
-            else -> HeatCell(
-                day,
-                HeatKind.SCHOOL,
-                data.statusOf(row.enrollment.id, day, Session.FIRST),
-                data.statusOf(row.enrollment.id, day, Session.SECOND),
-            )
+            declared -> HeatCell(day, HeatKind.HOLIDAY, null)
+            isWeekend(date) -> HeatCell(day, HeatKind.NO_SCHOOL, null)
+            !row.enrollment.isActiveOn(date) -> HeatCell(day, HeatKind.OFF_ROLL, null)
+            else -> HeatCell(day, HeatKind.SCHOOL, data.statusOf(row.enrollment.id, day))
         }
     }
 
-/** Sessions per status across a heat strip. */
+/** Days per status across a heat strip. */
 internal fun heatTotals(cells: List<HeatCell>): Map<AttendanceStatus, Int> {
     val totals = HashMap<AttendanceStatus, Int>()
     for (cell in cells) {
         if (cell.kind != HeatKind.SCHOOL) continue
-        cell.first?.let { totals[it] = (totals[it] ?: 0) + 1 }
-        cell.second?.let { totals[it] = (totals[it] ?: 0) + 1 }
+        cell.status?.let { totals[it] = (totals[it] ?: 0) + 1 }
     }
     return totals
 }
 
-/** A day count from sessions: "12", "12.5" (one session is half a day). */
-internal fun formatSessionsAsDays(sessions: Int): String =
-    if (sessions % 2 == 0) (sessions / 2).toString() else "${sessions / 2}.5"
+/** A day count for display. Attendance is taken once a day, so counts are whole days. */
+internal fun formatDays(days: Int): String = days.toString()
 
 /** Name of a status for spoken descriptions. */
 internal fun attendanceStatusWord(status: AttendanceStatus?): String = when (status) {
@@ -219,10 +205,5 @@ internal fun attendanceStatusWord(status: AttendanceStatus?): String = when (sta
     null -> "not marked"
 }
 
-internal fun attendanceSessionWord(session: Session): String = when (session) {
-    Session.FIRST -> "first timing"
-    Session.SECOND -> "second timing"
-}
-
-/** The letter shown on a timing button; a dash when nothing is marked. */
+/** The letter shown on a mark button; a dash when nothing is marked. */
 internal fun attendanceStatusLetter(status: AttendanceStatus?): String = status?.code ?: "–"

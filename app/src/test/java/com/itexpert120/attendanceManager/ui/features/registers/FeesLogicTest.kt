@@ -204,22 +204,21 @@ class FeesLogicTest {
     }
 
     @Test
-    fun `summary figures use days, two timings per working day and brought forward`() {
+    fun `summary figures use days, one mark per working day and brought forward`() {
         val marks = listOf(
             mark(1, 1, 3, Session.FIRST, AttendanceStatus.PRESENT),
-            mark(1, 1, 3, Session.SECOND, AttendanceStatus.PRESENT),
+            mark(1, 1, 4, Session.FIRST, AttendanceStatus.PRESENT),
             mark(1, 2, 3, Session.FIRST, AttendanceStatus.PRESENT), // struck-off student still counts
             mark(1, 3, 3, Session.FIRST, AttendanceStatus.ABSENT),
         )
         val data = data(marks = marks, broughtForward = mapOf(1L to 3, 3L to 2))
         val figures = summaryFigures(data)
 
-        assertEquals("1.5", figures.monthAttendanceDays)
-        assertEquals("2.5", figures.broughtForwardDays)
-        assertEquals("4", figures.academicYearDays)
-        assertEquals(data.workingTimings, figures.workingTimings)
-        assertEquals((data.workingTimings / 2).toString(), figures.workingDays)
-        assertEquals(summaryAverageLabel(3.0 / data.workingTimings), figures.averageAttendance)
+        assertEquals("3", figures.monthAttendanceDays)
+        assertEquals("5", figures.broughtForwardDays)
+        assertEquals("8", figures.academicYearDays)
+        assertEquals(data.workingDays.toString(), figures.workingDays)
+        assertEquals(summaryAverageLabel(3.0 / data.workingDays), figures.averageAttendance)
         assertEquals(3, figures.beginning)
         assertEquals(2, figures.end)
         assertEquals(1, figures.struckOff)
@@ -229,9 +228,8 @@ class FeesLogicTest {
     @Test
     fun `day and average labels`() {
         assertEquals("0", summaryDaysLabel(0))
-        assertEquals("0.5", summaryDaysLabel(1))
-        assertEquals("12", summaryDaysLabel(24))
-        assertEquals("12.5", summaryDaysLabel(25))
+        assertEquals("1", summaryDaysLabel(1))
+        assertEquals("25", summaryDaysLabel(25))
         assertEquals("0.00", summaryAverageLabel(0.0))
         assertEquals("1.67", summaryAverageLabel(5.0 / 3))
     }

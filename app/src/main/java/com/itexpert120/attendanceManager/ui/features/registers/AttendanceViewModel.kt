@@ -6,7 +6,6 @@ import com.itexpert120.attendanceManager.data.repo.RegisterData
 import com.itexpert120.attendanceManager.data.repo.RegisterRepository
 import com.itexpert120.attendanceManager.domain.ValidationException
 import com.itexpert120.attendanceManager.model.AttendanceStatus
-import com.itexpert120.attendanceManager.model.Session
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -55,38 +54,37 @@ internal class AttendanceViewModel(
         messageChannel.trySend(AttendanceMessage(text))
     }
 
-    fun setMark(registerId: Long, enrollmentId: Long, day: Int, session: Session, status: AttendanceStatus?) {
-        launchWrite { registers.setMark(registerId, enrollmentId, day, session, status) }
+    fun setMark(registerId: Long, enrollmentId: Long, day: Int, status: AttendanceStatus?) {
+        launchWrite { registers.setMark(registerId, enrollmentId, day, status) }
     }
 
-    /** Swipe gesture: absent for both timings, with Undo. */
+    /** Swipe gesture: absent for the day, with Undo. */
     fun markAbsent(data: RegisterData, enrollmentId: Long, name: String, day: Int) {
         val registerId = data.register.id
-        val before = snapshotMarks(data, day, Session.entries).filter { it.enrollmentId == enrollmentId }
+        val before = snapshotMarks(data, day).filter { it.enrollmentId == enrollmentId }
         if (before.all { it.previous == AttendanceStatus.ABSENT }) {
             post("$name is already absent")
             return
         }
         launchWrite {
-            Session.entries.forEach { registers.setMark(registerId, enrollmentId, day, it, AttendanceStatus.ABSENT) }
+            registers.setMark(registerId, enrollmentId, day, AttendanceStatus.ABSENT)
             messageChannel.trySend(AttendanceMessage("$name marked absent") { restore(registerId, day, before) })
         }
     }
 
-    /** Sets (or with a null [status] clears) every student's mark for the given timings, with Undo. */
-    fun bulk(data: RegisterData, day: Int, sessions: List<Session>, status: AttendanceStatus?) {
+    /** Sets (or with a null [status] clears) every student's mark for the day, with Undo. */
+    fun bulk(data: RegisterData, day: Int, status: AttendanceStatus?) {
         val registerId = data.register.id
-        val before = snapshotMarks(data, day, sessions)
+        val before = snapshotMarks(data, day)
         if (before.isEmpty()) return
         val changed = before.count { it.previous != status }
         if (changed == 0) {
             post(if (status == null) "Nothing to clear" else "Everyone is already marked ${bulkStatusWord(status)}")
             return
         }
-        val timings = timingsText(sessions)
         launchWrite {
-            sessions.forEach { registers.bulkSetMarks(registerId, day, it, status) }
-            val text = if (status == null) "Cleared $timings" else "All ${bulkStatusWord(status)} for $timings"
+            registers.bulkSetMarks(registerId, day, status)
+            val text = if (status == null) "Cleared the day's marks" else "Everyone marked ${bulkStatusWord(status)}"
             messageChannel.trySend(AttendanceMessage(text) { restore(registerId, day, before) })
         }
     }
@@ -100,7 +98,7 @@ internal class AttendanceViewModel(
             return
         }
         launchWrite {
-            blanks.forEach { registers.setMark(registerId, it.enrollmentId, day, it.session, AttendanceStatus.PRESENT) }
+            blanks.forEach { registers.setMark(registerId, it.enrollmentId, day, AttendanceStatus.PRESENT) }
             messageChannel.trySend(
                 AttendanceMessage("${blanks.size} blank marks set to present") { restore(registerId, day, blanks) },
             )
@@ -133,7 +131,7 @@ internal class AttendanceViewModel(
 
     private fun restore(registerId: Long, day: Int, changes: List<MarkChange>) {
         launchWrite {
-            changes.forEach { registers.setMark(registerId, it.enrollmentId, day, it.session, it.previous) }
+            changes.forEach { registers.setMark(registerId, it.enrollmentId, day, it.previous) }
         }
     }
 
@@ -155,11 +153,5 @@ internal class AttendanceViewModel(
         AttendanceStatus.PRESENT -> "present"
         AttendanceStatus.ABSENT -> "absent"
         AttendanceStatus.LEAVE -> "on leave"
-    }
-
-    private fun timingsText(sessions: List<Session>): String = when {
-        sessions.size >= 2 -> "both timings"
-        sessions.first() == Session.FIRST -> "the first timing"
-        else -> "the second timing"
     }
 }

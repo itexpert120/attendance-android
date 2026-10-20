@@ -13,17 +13,16 @@ import com.itexpert120.attendanceManager.model.AttendanceStatus
 import com.itexpert120.attendanceManager.model.EnrollmentRow
 import com.itexpert120.attendanceManager.model.FeeAmounts
 import com.itexpert120.attendanceManager.model.InstallmentNumber
-import com.itexpert120.attendanceManager.model.Session
 import com.itexpert120.attendanceManager.ui.features.registers.shortLabel
 import com.itexpert120.attendanceManager.ui.features.registers.summaryDaysLabel
 import com.itexpert120.attendanceManager.ui.features.registers.summaryFigures
 
 /**
  * The official monthly register, A4 landscape like the paper register (the PWA's `PrintRegister.svelte`):
- *  1. attendance pages, days 1–16 and 17–end, two timings per day, with each student's month total, brought
- *     forward and total, and a row of present days per timing (0.5 per present mark);
+ *  1. attendance pages, days 1–16 and 17–end, one column per day, with each student's month total, brought
+ *     forward and total, and a row with the number of students present each day;
  *  2. the fees and remarks page;
- *  3. the monthly close: student movement, working timings, installment collection and the incharge's signature.
+ *  3. the monthly close: student movement, working days, installment collection and the incharge's signature.
  * Every figure comes from [RegisterData] and the register logic, so the PDF matches the Summary and Fees tabs.
  */
 object RegisterPdf {
@@ -32,9 +31,11 @@ object RegisterPdf {
     /** Days per attendance page; the second page takes the rest of the month, as on the paper register. */
     private const val FIRST_PAGE_DAYS = 16
 
-    private const val TIMING_WIDTH = 14f
-    private const val TOTAL_WIDTH = 32f
-    private const val ADMISSION_WIDTH = 46f
+    /** One column per day; wide enough for a clear letter now that a day has a single mark. */
+    private const val DAY_WIDTH = 22f
+    private const val TOTAL_WIDTH = 34f
+    /** B-Form numbers are 13 digits (15 with dashes), so this column is wider than the old admission number. */
+    private const val B_FORM_WIDTH = 72f
     private const val ROLL_WIDTH = 28f
 
     /** Dark red of the PWA's holiday notes. */
@@ -94,7 +95,7 @@ object RegisterPdf {
         }
         doc.text(
             "P = Present · A = Absent · L = Leave · H = Holiday or weekend · – = Not on the roll     " +
-                "F = First timing · S = Second timing · Each timing = 0.5 · Column totals = present days",
+                "Column totals = students present that day · Month, B/F and Total = present days",
             PdfTextStyle(7f, color = PdfColors.Muted),
             spacingAfter = 2f,
         )
@@ -107,12 +108,10 @@ object RegisterPdf {
     internal fun attendanceTable(data: RegisterData, chunk: List<Int>, last: Boolean): PdfTable {
         val register = data.register
         val columns = buildList {
-            add(PdfColumn("Admission", width = ADMISSION_WIDTH, align = PdfAlign.CENTER))
+            add(PdfColumn("B-Form", width = B_FORM_WIDTH, align = PdfAlign.CENTER))
             add(PdfColumn("Roll", width = ROLL_WIDTH, align = PdfAlign.CENTER))
             add(PdfColumn("Name with parentage", weight = 1f))
-            chunk.forEach { day ->
-                Session.entries.forEach { session -> add(PdfColumn("$day${timingLetter(session)}", width = TIMING_WIDTH, align = PdfAlign.CENTER)) }
-            }
+            chunk.forEach { day -> add(PdfColumn("$day", width = DAY_WIDTH, align = PdfAlign.CENTER)) }
             if (last) {
                 add(PdfColumn("Month", width = TOTAL_WIDTH, align = PdfAlign.CENTER))
                 add(PdfColumn("B/F", width = TOTAL_WIDTH, align = PdfAlign.CENTER))
@@ -122,17 +121,16 @@ object RegisterPdf {
         fun dayFill(day: Int) = if (data.isHoliday(day)) PdfColors.HolidayFill else null
         val header = listOf(
             buildList {
-                add(PdfHeaderCell("Admission", rowSpan = 2))
-                add(PdfHeaderCell("Roll", rowSpan = 2))
-                add(PdfHeaderCell("Name with parentage", rowSpan = 2))
-                chunk.forEach { day -> add(PdfHeaderCell(day.toString(), span = Session.entries.size, fill = dayFill(day))) }
+                add(PdfHeaderCell("B-Form"))
+                add(PdfHeaderCell("Roll"))
+                add(PdfHeaderCell("Name with parentage"))
+                chunk.forEach { day -> add(PdfHeaderCell(day.toString(), fill = dayFill(day))) }
                 if (last) {
-                    add(PdfHeaderCell("Month", rowSpan = 2))
-                    add(PdfHeaderCell("B/F", rowSpan = 2))
-                    add(PdfHeaderCell("Total", rowSpan = 2))
+                    add(PdfHeaderCell("Month"))
+                    add(PdfHeaderCell("B/F"))
+                    add(PdfHeaderCell("Total"))
                 }
             },
-            chunk.flatMap { day -> Session.entries.map { PdfHeaderCell(timingLetter(it), fill = dayFill(day)) } },
         )
 
         val rows = data.attendanceRows.map { row ->
@@ -141,7 +139,7 @@ object RegisterPdf {
                 add(PdfCell(row.student.admissionNumber))
                 add(PdfCell(row.enrollment.rollNumber))
                 add(PdfCell(row.student.name, bold = true))
-                chunk.forEach { day -> Session.entries.forEach { session -> add(markCell(data, row, day, session)) } }
+                chunk.forEach { day -> add(markCell(data, row, day)) }
                 if (last) {
                     val current = data.presentSessionsOf(id)
                     val brought = data.broughtForwardOf(id)
@@ -159,13 +157,10 @@ object RegisterPdf {
                 add(PdfCell(""))
                 add(PdfCell("Column totals"))
                 chunk.forEach { day ->
-                    Session.entries.forEach { session ->
-                        add(
-                            if (data.isHoliday(day)) PdfCell("H", fill = PdfColors.HolidayFill, color = PdfColors.Muted)
-                            // As in the PWA, each present mark adds 0.5 (one timing is half a day).
-                            else PdfCell(summaryDaysLabel(data.presentOn(day, session))),
-                        )
-                    }
+                    add(
+                        if (data.isHoliday(day)) PdfCell("H", fill = PdfColors.HolidayFill, color = PdfColors.Muted)
+                        else PdfCell(data.presentOn(day).toString()),
+                    )
                 }
                 if (last) {
                     add(PdfCell(summaryDaysLabel(data.visiblePresentTotal)))
@@ -178,7 +173,7 @@ object RegisterPdf {
         return PdfTable(
             columns = columns,
             rows = rows,
-            fontSize = 7f,
+            fontSize = 8f,
             cellPadding = 2f,
             zebra = false,
             totals = totals,
@@ -186,10 +181,10 @@ object RegisterPdf {
         )
     }
 
-    private fun markCell(data: RegisterData, row: EnrollmentRow, day: Int, session: Session): PdfCell {
+    private fun markCell(data: RegisterData, row: EnrollmentRow, day: Int): PdfCell {
         if (data.isHoliday(day)) return PdfCell("H", fill = PdfColors.HolidayFill, color = PdfColors.Muted)
         if (!row.enrollment.isActiveOn(data.register.dateOf(day))) return PdfCell("–", color = PdfColors.Muted)
-        return when (data.statusOf(row.enrollment.id, day, session)) {
+        return when (data.statusOf(row.enrollment.id, day)) {
             AttendanceStatus.PRESENT -> PdfCell("P", fill = PdfColors.PresentFill)
             AttendanceStatus.ABSENT -> PdfCell("A", bold = true, fill = PdfColors.AbsentFill)
             AttendanceStatus.LEAVE -> PdfCell("L", fill = PdfColors.LeaveFill)
@@ -197,7 +192,6 @@ object RegisterPdf {
         }
     }
 
-    private fun timingLetter(session: Session) = if (session == Session.FIRST) "F" else "S"
 
     // endregion
 
@@ -212,7 +206,7 @@ object RegisterPdf {
             logo = logo,
         )
         val columns = buildList {
-            add(PdfColumn("Adm.", width = ADMISSION_WIDTH, align = PdfAlign.CENTER))
+            add(PdfColumn("B-Form", width = B_FORM_WIDTH, align = PdfAlign.CENTER))
             add(PdfColumn("Roll", width = ROLL_WIDTH, align = PdfAlign.CENTER))
             add(PdfColumn("Name with parentage", weight = 1.4f))
             FeeField.entries.forEach { add(PdfColumn(it.shortLabel, width = 54f, align = PdfAlign.END)) }
@@ -268,7 +262,7 @@ object RegisterPdf {
         val movementRows = listOf(
             PdfRow(listOf(label("Students at beginning"), value(figures.beginning.toString()), label("Students at end"), value(figures.end.toString()))),
             PdfRow(listOf(label("Admitted during month"), value(figures.admitted.toString()), label("Struck off during month"), value(figures.struckOff.toString()))),
-            PdfRow(listOf(label("Total timings"), value(figures.workingTimings.toString()), label("Attendance in month"), value(figures.monthAttendanceDays))),
+            PdfRow(listOf(label("Working days"), value(figures.workingDays), label("Attendance in month"), value(figures.monthAttendanceDays))),
             PdfRow(listOf(label("Academic year attendance"), value(figures.academicYearDays), label("Average attendance"), value(figures.averageAttendance))),
         )
         doc.table(

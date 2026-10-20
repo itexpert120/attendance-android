@@ -3,13 +3,11 @@ package com.itexpert120.attendanceManager.export
 import android.graphics.Bitmap
 import com.itexpert120.attendanceManager.data.repo.RegisterData
 import com.itexpert120.attendanceManager.domain.AttendanceReport
-import com.itexpert120.attendanceManager.domain.AttendanceReportStudent
 import com.itexpert120.attendanceManager.domain.PhotoStore
 import com.itexpert120.attendanceManager.domain.ReportPeriodType
-import com.itexpert120.attendanceManager.model.Session
 import com.itexpert120.attendanceManager.ui.features.registers.REPORT_TIMING_NOTE
 import com.itexpert120.attendanceManager.ui.features.registers.formatRate
-import com.itexpert120.attendanceManager.ui.features.registers.formatSessionsAsDays
+import com.itexpert120.attendanceManager.ui.features.registers.formatDays
 import com.itexpert120.attendanceManager.ui.features.registers.formatRatePrecise
 import com.itexpert120.attendanceManager.ui.features.registers.reportAbsentees
 import com.itexpert120.attendanceManager.ui.features.registers.reportPeriodTypeLabel
@@ -47,16 +45,16 @@ object AttendanceReportPdf {
             schoolName = school,
             eyebrow = reportTitle(report),
             title = "Attendance report",
-            subtitle = "${classLine(data)} · ${report.period.label} · Each timing = 0.5",
+            subtitle = "${classLine(data)} · ${report.period.label}",
             logo = logo,
         )
         val rate = reportRate(report)
         doc.stats(
             listOf(
-                "Present" to formatSessionsAsDays(report.present),
-                "Absent" to formatSessionsAsDays(report.absent),
-                "Leave" to formatSessionsAsDays(report.leave),
-                "Unmarked" to formatSessionsAsDays(report.unmarked),
+                "Present" to formatDays(report.present),
+                "Absent" to formatDays(report.absent),
+                "Leave" to formatDays(report.leave),
+                "Unmarked" to formatDays(report.unmarked),
                 "Attendance" to (rate?.let { "${formatRatePrecise(it)}%" } ?: "—"),
             ),
         )
@@ -80,14 +78,12 @@ object AttendanceReportPdf {
                         columns = listOf(
                             PdfColumn("Roll", width = 48f),
                             PdfColumn("Name with parentage", weight = 1f),
-                            PdfColumn("Absent", width = 110f),
                         ),
                         rows = absentees.map { student ->
                             PdfRow(
                                 listOf(
                                     PdfCell(student.row.enrollment.rollNumber, bold = true),
                                     PdfCell(student.row.student.name),
-                                    PdfCell(dailyTimingLabel(student, short = true)),
                                 ),
                             )
                         },
@@ -112,10 +108,10 @@ object AttendanceReportPdf {
                 listOf(
                     PdfCell(student.row.enrollment.rollNumber, bold = true),
                     PdfCell(student.row.student.name, bold = true),
-                    PdfCell(formatSessionsAsDays(student.present)),
-                    PdfCell(formatSessionsAsDays(student.absent), fill = if (student.absent > 0) PdfColors.AbsentFill else null),
-                    PdfCell(formatSessionsAsDays(student.leave)),
-                    PdfCell(formatSessionsAsDays(student.unmarked)),
+                    PdfCell(formatDays(student.present)),
+                    PdfCell(formatDays(student.absent), fill = if (student.absent > 0) PdfColors.AbsentFill else null),
+                    PdfCell(formatDays(student.leave)),
+                    PdfCell(formatDays(student.unmarked)),
                     PdfCell(formatRate(studentRate(student)), bold = true),
                 ),
             )
@@ -124,10 +120,10 @@ object AttendanceReportPdf {
             listOf(
                 PdfCell(""),
                 PdfCell("Total"),
-                PdfCell(formatSessionsAsDays(report.present)),
-                PdfCell(formatSessionsAsDays(report.absent)),
-                PdfCell(formatSessionsAsDays(report.leave)),
-                PdfCell(formatSessionsAsDays(report.unmarked)),
+                PdfCell(formatDays(report.present)),
+                PdfCell(formatDays(report.absent)),
+                PdfCell(formatDays(report.leave)),
+                PdfCell(formatDays(report.unmarked)),
                 PdfCell(formatRate(rate)),
             ),
         )
@@ -169,7 +165,7 @@ object AttendanceReportPdf {
         doc.stats(
             listOf(
                 "Absent students" to absentees.size.toString(),
-                "Absent days" to formatSessionsAsDays(absentees.sumOf { it.absent }),
+                "Absent days" to formatDays(absentees.sumOf { it.absent }),
             ),
         )
 
@@ -185,23 +181,23 @@ object AttendanceReportPdf {
             val daily = report.type == ReportPeriodType.DAILY
             doc.table(
                 PdfTable(
-                    columns = listOf(
-                        PdfColumn("Photo", width = 46f, align = PdfAlign.CENTER),
-                        PdfColumn("Roll no.", width = 56f),
-                        PdfColumn("Name", weight = 1f),
-                        PdfColumn("Date of absence", width = 150f),
-                        PdfColumn(if (daily) "Timing" else "Days absent", width = 84f),
-                    ),
+                    columns = buildList {
+                        add(PdfColumn("Photo", width = 46f, align = PdfAlign.CENTER))
+                        add(PdfColumn("Roll no.", width = 56f))
+                        add(PdfColumn("Name", weight = 1f))
+                        add(PdfColumn(if (daily) "Date of absence" else "Period", width = 150f))
+                        if (!daily) add(PdfColumn("Days absent", width = 84f))
+                    },
                     rows = absentees.map { student ->
                         val photo = photos[student.row.enrollment.id]
                         PdfRow(
-                            listOf(
-                                if (photo != null) PdfCell("", image = photo, imageSize = 30f) else PdfCell("—", color = PdfColors.Muted),
-                                PdfCell(student.row.enrollment.rollNumber, bold = true),
-                                PdfCell(student.row.student.name, bold = true),
-                                PdfCell(report.period.label),
-                                PdfCell(if (daily) dailyTimingLabel(student, short = false) else formatSessionsAsDays(student.absent)),
-                            ),
+                            buildList {
+                                add(if (photo != null) PdfCell("", image = photo, imageSize = 30f) else PdfCell("—", color = PdfColors.Muted))
+                                add(PdfCell(student.row.enrollment.rollNumber, bold = true))
+                                add(PdfCell(student.row.student.name, bold = true))
+                                add(PdfCell(report.period.label))
+                                if (!daily) add(PdfCell(formatDays(student.absent)))
+                            },
                         )
                     },
                     fontSize = 9f,
@@ -214,20 +210,6 @@ object AttendanceReportPdf {
     }
 
     // endregion
-
-    /** "Both timings" / "First timing" / "Second timing" (or "Both" / "First" / "Second"). */
-    private fun dailyTimingLabel(student: AttendanceReportStudent, short: Boolean): String {
-        val word = when {
-            student.absentSessions.size >= 2 -> "Both"
-            student.absentSessions.firstOrNull() == Session.FIRST -> "First"
-            else -> "Second"
-        }
-        return when {
-            short -> word
-            word == "Both" -> "Both timings"
-            else -> "$word timing"
-        }
-    }
 
     private fun classLine(data: RegisterData) = "Class ${data.classGroup.className} · Section ${data.classGroup.section}"
 

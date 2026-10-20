@@ -14,7 +14,6 @@ import com.itexpert120.attendanceManager.model.Enrollment
 import com.itexpert120.attendanceManager.model.FeeAmounts
 import com.itexpert120.attendanceManager.model.InstallmentNumber
 import com.itexpert120.attendanceManager.model.SchoolSettings
-import com.itexpert120.attendanceManager.model.Session
 import com.itexpert120.attendanceManager.model.Student
 import com.itexpert120.attendanceManager.support.FakePhotoStore
 import com.itexpert120.attendanceManager.support.MutableClock
@@ -56,10 +55,8 @@ class RegisterPdfTest {
             )
         }
         for (day in listOf(10, 11)) {
-            repo.setMark(registerId, enrollments[0], day, Session.FIRST, AttendanceStatus.PRESENT)
-            repo.setMark(registerId, enrollments[0], day, Session.SECOND, AttendanceStatus.PRESENT)
-            repo.setMark(registerId, enrollments[1], day, Session.FIRST, AttendanceStatus.ABSENT)
-            repo.setMark(registerId, enrollments[1], day, Session.SECOND, AttendanceStatus.LEAVE)
+            repo.setMark(registerId, enrollments[0], day, AttendanceStatus.PRESENT)
+            repo.setMark(registerId, enrollments[1], day, if (day == 10) AttendanceStatus.ABSENT else AttendanceStatus.LEAVE)
         }
         repo.saveFeeEntries(registerId, enrollments[0], listOf(InstallmentFees(InstallmentNumber.FIRST, FeeAmounts(ftf = 50_00, ff = 10_50))))
         repo.saveInstallmentMeta(registerId, InstallmentNumber.FIRST, 50_00, "Mr. Khan")

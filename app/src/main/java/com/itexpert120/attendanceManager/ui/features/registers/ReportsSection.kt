@@ -72,7 +72,7 @@ import com.itexpert120.attendanceManager.export.AttendanceReportPdf
 import com.itexpert120.attendanceManager.ui.components.PdfExportState
 import com.itexpert120.attendanceManager.ui.components.PdfRequest
 import com.itexpert120.attendanceManager.data.repo.absenceMessageRecipients
-import com.itexpert120.attendanceManager.data.repo.absenceSessionLabel
+
 import com.itexpert120.attendanceManager.domain.AttendanceReport
 import com.itexpert120.attendanceManager.domain.AttendanceReportStudent
 import com.itexpert120.attendanceManager.domain.ReportPeriodType
@@ -518,7 +518,7 @@ private fun ReportsSummaryCard(report: AttendanceReport, notice: String?, modifi
                 ReportsCountTile(null, "Blank", report.unmarked, Modifier.weight(1f))
             }
             Text(
-                "Each timing counts as 0.5.",
+                "Figures are in days.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -532,12 +532,12 @@ private fun ReportsSummaryCard(report: AttendanceReport, notice: String?, modifi
 @Composable
 private fun ReportsCountTile(status: AttendanceStatus?, label: String, value: Int, modifier: Modifier = Modifier) {
     Column(
-        modifier.semantics(mergeDescendants = true) { contentDescription = "$label: ${formatSessionsAsDays(value)} days" },
+        modifier.semantics(mergeDescendants = true) { contentDescription = "$label: ${formatDays(value)} days" },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         ReportsStatusLetter(status)
-        Text(formatSessionsAsDays(value), style = MaterialTheme.typography.titleLarge)
+        Text(formatDays(value), style = MaterialTheme.typography.titleLarge)
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
@@ -642,7 +642,7 @@ private fun LazyListScope.absenteeItems(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        "Absent ${absenceSessionLabel(student.absentSessions)} · " +
+                        "Absent for the day · " +
                             if (hasUsablePhone(phone)) phoneDisplay(phone) else "No phone",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -700,16 +700,11 @@ private fun LazyListScope.studentItems(
                     )
                 }
                 if (daily) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Session.entries.forEach { session ->
-                            val status = data.statusOf(id, selectedDay, session)
-                            val timing = if (session == Session.FIRST) "First timing" else "Second timing"
-                            ReportsStatusLetter(
-                                status,
-                                Modifier.semantics { contentDescription = "$timing: ${statusName(status)}" },
-                            )
-                        }
-                    }
+                    val status = data.statusOf(id, selectedDay)
+                    ReportsStatusLetter(
+                        status,
+                        Modifier.semantics { contentDescription = "Marked ${statusName(status)}" },
+                    )
                 } else {
                     Text(formatRate(studentRate(student)), style = MaterialTheme.typography.titleMedium)
                 }
@@ -738,11 +733,8 @@ private fun previewData(): RegisterData {
     val day = 6
     val extra = listOf(
         AttendanceMark(1, 1, day, Session.FIRST, AttendanceStatus.PRESENT),
-        AttendanceMark(1, 1, day, Session.SECOND, AttendanceStatus.PRESENT),
         AttendanceMark(1, 2, day, Session.FIRST, AttendanceStatus.ABSENT),
-        AttendanceMark(1, 2, day, Session.SECOND, AttendanceStatus.ABSENT),
         AttendanceMark(1, 3, day, Session.FIRST, AttendanceStatus.ABSENT),
-        AttendanceMark(1, 3, day, Session.SECOND, AttendanceStatus.PRESENT),
         AttendanceMark(1, 5, day, Session.FIRST, AttendanceStatus.LEAVE),
     )
     return base.copy(monthRows = rows, attendanceRows = rows, marks = base.marks + extra)

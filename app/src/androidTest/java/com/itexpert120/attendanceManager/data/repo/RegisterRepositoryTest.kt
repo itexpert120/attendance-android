@@ -18,7 +18,6 @@ import com.itexpert120.attendanceManager.model.InstallmentNumber.THIRD
 import com.itexpert120.attendanceManager.model.SchoolSettings
 import com.itexpert120.attendanceManager.model.Session
 import com.itexpert120.attendanceManager.model.Session.FIRST as MORNING
-import com.itexpert120.attendanceManager.model.Session.SECOND as AFTERNOON
 import com.itexpert120.attendanceManager.model.Student
 import com.itexpert120.attendanceManager.support.MutableClock
 import com.itexpert120.attendanceManager.support.inMemoryDatabase
@@ -127,20 +126,20 @@ class RegisterRepositoryTest {
 
     @Test
     fun setsAndClearsASingleMark() = runBlocking {
-        repo.setMark(registerId, enrollmentId, 11, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 11, PRESENT)
 
         assertEquals(listOf(AttendanceMark(registerId, enrollmentId, 11, MORNING, PRESENT)), marks())
 
-        repo.setMark(registerId, enrollmentId, 11, MORNING, ABSENT)
+        repo.setMark(registerId, enrollmentId, 11, ABSENT)
         assertEquals(listOf(ABSENT), marks().map { it.status })
 
-        repo.setMark(registerId, enrollmentId, 11, MORNING, null)
+        repo.setMark(registerId, enrollmentId, 11, null)
         assertTrue(marks().isEmpty())
     }
 
     @Test
     fun preservesHiddenStruckOffAttendanceDuringBulkMarkingAndClearing() = runBlocking {
-        repo.setMark(registerId, enrollmentId, 11, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 11, PRESENT)
         val struckOff = db.enrollments().getById(enrollmentId)!!
         db.enrollments().update(struckOff.copy(struckOffOn = LocalDate.parse("2026-08-11")))
 
@@ -148,8 +147,8 @@ class RegisterRepositoryTest {
         assertTrue(hidden.attendanceRows.isEmpty())
         assertEquals(1, hidden.monthRows.size)
 
-        repo.bulkSetMarks(registerId, 11, MORNING, ABSENT)
-        repo.bulkSetMarks(registerId, 11, MORNING, null)
+        repo.bulkSetMarks(registerId, 11, ABSENT)
+        repo.bulkSetMarks(registerId, 11, null)
 
         assertEquals(listOf(PRESENT), marks().map { it.status })
 
@@ -164,24 +163,24 @@ class RegisterRepositoryTest {
         val otherClass = addClass("5", "B")
         val outsider = enrol(otherClass, "B-001", "1", "2026-08-01")
 
-        repo.bulkSetMarks(registerId, 11, AFTERNOON, LEAVE)
+        repo.bulkSetMarks(registerId, 11, LEAVE)
 
         val written = marks()
         assertEquals(setOf(enrollmentId, second), written.map { it.enrollmentId }.toSet())
-        assertTrue(written.all { it.status == LEAVE && it.session == AFTERNOON && it.day == 11 })
+        assertTrue(written.all { it.status == LEAVE && it.session == MORNING && it.day == 11 })
         assertFalse(written.any { it.enrollmentId == joinsLater || it.enrollmentId == outsider })
 
-        repo.bulkSetMarks(registerId, 11, MORNING, PRESENT)
-        repo.bulkSetMarks(registerId, 11, AFTERNOON, null)
-        assertEquals(setOf(MORNING), marks().map { it.session }.toSet())
-        assertEquals(2, marks().size)
+        // One mark per student and day: marking again replaces it, clearing removes it.
+        repo.bulkSetMarks(registerId, 11, PRESENT)
+        assertEquals(listOf(PRESENT, PRESENT), marks().map { it.status })
+        repo.bulkSetMarks(registerId, 11, null)
+        assertTrue(marks().isEmpty())
     }
 
     @Test
     fun clearsMarksWhenASchoolHolidayIsCreated() = runBlocking {
-        repo.setMark(registerId, enrollmentId, 11, MORNING, PRESENT)
-        repo.setMark(registerId, enrollmentId, 11, AFTERNOON, ABSENT)
-        repo.setMark(registerId, enrollmentId, 10, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 11, PRESENT)
+        repo.setMark(registerId, enrollmentId, 10, PRESENT)
 
         repo.toggleHoliday(registerId, 11)
 
@@ -202,36 +201,36 @@ class RegisterRepositoryTest {
 
     @Test
     fun togglingAnExistingHolidayRemovesItWithoutRestoringMarks() = runBlocking {
-        repo.setMark(registerId, enrollmentId, 11, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 11, PRESENT)
         repo.toggleHoliday(registerId, 11, "Strike")
         repo.toggleHoliday(registerId, 11)
 
         assertTrue(db.holidays().getForRegister(registerId).isEmpty())
         assertTrue(marks().isEmpty())
 
-        repo.setMark(registerId, enrollmentId, 11, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 11, PRESENT)
         assertEquals(1, marks().size)
     }
 
     @Test
     fun ignoresAttendanceEditsOutsideTheSevenDayWindow() = runBlocking {
         // 4 August is eight days before "today", 13 August is tomorrow.
-        repo.setMark(registerId, enrollmentId, 4, MORNING, PRESENT)
-        repo.setMark(registerId, enrollmentId, 13, MORNING, PRESENT)
-        repo.bulkSetMarks(registerId, 4, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 4, PRESENT)
+        repo.setMark(registerId, enrollmentId, 13, PRESENT)
+        repo.bulkSetMarks(registerId, 4, PRESENT)
         repo.toggleHoliday(registerId, 4, "Too old")
         assertTrue(marks().isEmpty())
         assertTrue(db.holidays().getForRegister(registerId).isEmpty())
 
         // 5 August is exactly seven days ago and still editable.
-        repo.setMark(registerId, enrollmentId, 5, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 5, PRESENT)
         assertEquals(1, marks().size)
     }
 
     @Test
     fun ignoresEditsOldEnoughToBeInAPreviousRegister() = runBlocking {
         val july = repo.createRegister(classId, 2026, 7).id
-        repo.setMark(july, enrollmentId, 31, MORNING, PRESENT)
+        repo.setMark(july, enrollmentId, 31, PRESENT)
         assertTrue(db.attendance().getForRegister(july).isEmpty())
     }
 
@@ -239,19 +238,19 @@ class RegisterRepositoryTest {
     fun ignoresMarksOnWeekendsDeclaredHolidaysAndDaysBeforeAdmission() = runBlocking {
         val late = enrol(classId, "A-002", "2", "2026-08-12")
         // Saturday 8 August.
-        repo.setMark(registerId, enrollmentId, 8, MORNING, PRESENT)
-        repo.bulkSetMarks(registerId, 8, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 8, PRESENT)
+        repo.bulkSetMarks(registerId, 8, PRESENT)
         assertTrue(marks().isEmpty())
 
         // Admitted on the 12th: not on the roll on the 11th.
-        repo.setMark(registerId, late, 11, MORNING, PRESENT)
+        repo.setMark(registerId, late, 11, PRESENT)
         assertTrue(marks().isEmpty())
-        repo.setMark(registerId, late, 12, MORNING, PRESENT)
+        repo.setMark(registerId, late, 12, PRESENT)
         assertEquals(1, marks().size)
 
         repo.toggleHoliday(registerId, 10, "Closed")
-        repo.setMark(registerId, enrollmentId, 10, MORNING, PRESENT)
-        repo.bulkSetMarks(registerId, 10, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 10, PRESENT)
+        repo.bulkSetMarks(registerId, 10, PRESENT)
         assertEquals(listOf(12), marks().map { it.day })
     }
 
@@ -259,9 +258,9 @@ class RegisterRepositoryTest {
     fun ignoresStrangersAndMissingRegisters() = runBlocking {
         val otherClass = addClass("5", "B")
         val outsider = enrol(otherClass, "B-001", "1", "2026-08-01")
-        repo.setMark(registerId, outsider, 11, MORNING, PRESENT)
-        repo.setMark(registerId, 424242, 11, MORNING, PRESENT)
-        repo.setMark(555, enrollmentId, 11, MORNING, PRESENT)
+        repo.setMark(registerId, outsider, 11, PRESENT)
+        repo.setMark(registerId, 424242, 11, PRESENT)
+        repo.setMark(555, enrollmentId, 11, PRESENT)
         repo.toggleHoliday(555, 11)
         assertTrue(marks().isEmpty())
     }
@@ -269,9 +268,9 @@ class RegisterRepositoryTest {
     @Test
     fun editWindowFollowsTheClock() = runBlocking {
         clock.now = Instant.parse("2026-08-20T09:00:00Z")
-        repo.setMark(registerId, enrollmentId, 11, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 11, PRESENT)
         assertTrue(marks().isEmpty())
-        repo.setMark(registerId, enrollmentId, 13, MORNING, PRESENT)
+        repo.setMark(registerId, enrollmentId, 13, PRESENT)
         assertEquals(1, marks().size)
     }
 
@@ -335,37 +334,37 @@ class RegisterRepositoryTest {
 
     @Test
     fun observeRegisterReflectsMutations() = runBlocking {
-        repo.setMark(registerId, enrollmentId, 11, MORNING, PRESENT)
-        repo.setMark(registerId, enrollmentId, 11, AFTERNOON, ABSENT)
+        repo.setMark(registerId, enrollmentId, 11, PRESENT)
+        repo.setMark(registerId, enrollmentId, 9, ABSENT) // Sunday: ignored
         repo.toggleHoliday(registerId, 10, "Closed")
 
         val data = snapshot()
         assertEquals(registerId, data.register.id)
         assertEquals("5", data.classGroup.className)
         assertEquals("Test School", data.settings?.schoolName)
-        assertEquals(PRESENT, data.statusOf(enrollmentId, 11, MORNING))
-        assertEquals(ABSENT, data.statusOf(enrollmentId, 11, AFTERNOON))
-        assertNull(data.statusOf(enrollmentId, 12, MORNING))
+        assertEquals(PRESENT, data.statusOf(enrollmentId, 11))
+        assertNull(data.statusOf(enrollmentId, 9))
+        assertNull(data.statusOf(enrollmentId, 12))
         assertEquals(mapOf(10 to "Closed"), data.holidayTitles)
         assertTrue(data.isHoliday(10))
         assertTrue(data.isHoliday(8)) // Saturday
         assertFalse(data.isHoliday(11))
         assertEquals(1, data.presentSessionsOf(enrollmentId))
         assertEquals(1, data.monthPresentSessions)
-        assertEquals(1, data.presentOn(11, MORNING))
-        assertEquals(0, data.presentOn(11, AFTERNOON))
+        assertEquals(1, data.presentOn(11))
+        assertEquals(0, data.presentOn(12))
         assertTrue(data.isDayEditable(11, LocalDate.parse("2026-08-12")))
         assertFalse(data.isDayEditable(4, LocalDate.parse("2026-08-12")))
 
         // 21 weekdays in August 2026, minus the declared holiday on a Monday-Friday.
-        assertEquals((21 - 1) * 2, data.workingTimings)
-        assertEquals(1.0 / ((21 - 1) * 2), data.averageAttendance, 1e-9)
+        assertEquals(21 - 1, data.workingDays)
+        assertEquals(1.0 / (21 - 1), data.averageAttendance, 1e-9)
 
         // A later write shows up on the same flow subscription.
         val flow = repo.observeRegister(registerId)
-        repo.setMark(registerId, enrollmentId, 12, MORNING, LEAVE)
-        val updated = withTimeout(10_000) { flow.first { it?.statusOf(enrollmentId, 12, MORNING) == LEAVE }!! }
-        assertEquals(LEAVE, updated.statusOf(enrollmentId, 12, MORNING))
+        repo.setMark(registerId, enrollmentId, 12, LEAVE)
+        val updated = withTimeout(10_000) { flow.first { it?.statusOf(enrollmentId, 12) == LEAVE }!! }
+        assertEquals(LEAVE, updated.statusOf(enrollmentId, 12))
     }
 
     @Test
@@ -389,7 +388,7 @@ class RegisterRepositoryTest {
         val withMarks = snapshot()
         assertEquals(2, withMarks.monthPresentSessions)
         assertEquals(1, withMarks.visiblePresentTotal)
-        assertEquals(1, withMarks.presentOn(3, MORNING))
+        assertEquals(1, withMarks.presentOn(3))
 
         // All four admitted on 1 August; A-003 is struck off on the 5th.
         assertEquals(4, data.movement.beginning)
@@ -411,7 +410,7 @@ class RegisterRepositoryTest {
         suspend fun put(register: Long, enrollment: Long, day: Int, session: Session, status: AttendanceStatus) =
             db.attendance().upsert(AttendanceMark(register, enrollment, day, session, status))
         put(june, enrollmentId, 1, MORNING, PRESENT)
-        put(june, enrollmentId, 1, AFTERNOON, PRESENT)
+        put(june, enrollmentId, 3, MORNING, PRESENT)
         put(june, enrollmentId, 2, MORNING, ABSENT)
         put(july, enrollmentId, 1, MORNING, PRESENT)
         put(march, enrollmentId, 2, MORNING, PRESENT)
@@ -485,10 +484,8 @@ class RegisterRepositoryTest {
     @Test
     fun observeRegisterBuildsAttendanceReportsAndAbsenceMessages() = runBlocking {
         val second = enrol(classId, "A-002", "2", "2026-08-01")
-        repo.setMark(registerId, enrollmentId, 11, MORNING, PRESENT)
-        repo.setMark(registerId, enrollmentId, 11, AFTERNOON, PRESENT)
-        repo.setMark(registerId, second, 11, MORNING, ABSENT)
-        repo.setMark(registerId, second, 11, AFTERNOON, ABSENT)
+        repo.setMark(registerId, enrollmentId, 11, PRESENT)
+        repo.setMark(registerId, second, 11, ABSENT)
         db.settings().upsert(
             SchoolSettings(
                 schoolName = "Test School",
@@ -500,15 +497,15 @@ class RegisterRepositoryTest {
 
         val data = snapshot()
         val report = data.report(ReportPeriodType.DAILY, 11)
-        assertEquals(2, report.present)
-        assertEquals(2, report.absent)
+        assertEquals(1, report.present)
+        assertEquals(1, report.absent)
         assertEquals("Tuesday, August 11, 2026", report.period.label)
 
         val recipients = absenceMessageRecipients(report, data.classGroup, data.settings)
         assertEquals(1, recipients.size)
         assertEquals(second, recipients[0].student.row.enrollment.id)
         assertEquals(
-            "Dear Parent/Guardian, Student A-002 was marked absent for both timings on Tuesday, August 11, 2026 " +
+            "Dear Parent/Guardian, Student A-002 was marked absent for the day on Tuesday, August 11, 2026 " +
                 "at Test School. Please contact Ms Khan, the class incharge, if this is unexpected.",
             recipients[0].message,
         )

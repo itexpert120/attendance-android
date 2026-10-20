@@ -29,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -82,22 +83,19 @@ private fun HeatPalette.of(status: AttendanceStatus?): Color = when (status) {
     null -> blank
 }
 
-/** The day-by-day strip: one column per day, top half the first timing, bottom half the second. */
+/** The day-by-day strip: one bar per day, coloured by that day's mark. */
 @Composable
 internal fun HeatStrip(cells: List<HeatCell>, palette: HeatPalette, modifier: Modifier = Modifier) {
-    Canvas(modifier.fillMaxWidth().height(22.dp)) {
+    Canvas(modifier.fillMaxWidth().height(20.dp)) {
         if (cells.isEmpty()) return@Canvas
         val gap = 1.5.dp.toPx()
         val cellWidth = (size.width - gap * (cells.size - 1)) / cells.size
-        val half = (size.height - 2.dp.toPx()) / 2f
         val corner = CornerRadius(1.5.dp.toPx())
         cells.forEachIndexed { index, cell ->
             val x = index * (cellWidth + gap)
             when (cell.kind) {
-                HeatKind.SCHOOL -> {
-                    drawRoundRect(palette.of(cell.first), Offset(x, 0f), Size(cellWidth, half), corner)
-                    drawRoundRect(palette.of(cell.second), Offset(x, half + 2.dp.toPx()), Size(cellWidth, half), corner)
-                }
+                HeatKind.SCHOOL ->
+                    drawRoundRect(palette.of(cell.status), Offset(x, 0f), Size(cellWidth, size.height), corner)
                 HeatKind.NO_SCHOOL, HeatKind.HOLIDAY ->
                     drawRoundRect(palette.noSchool, Offset(x, size.height / 2 - 2.dp.toPx()), Size(cellWidth, 4.dp.toPx()), corner)
                 HeatKind.OFF_ROLL -> Unit
@@ -140,12 +138,12 @@ private fun MonthSummaryCard(data: RegisterData) {
     Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainerLowest) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                SummaryFigure("This month", formatSessionsAsDays(month))
-                SummaryFigure("Brought forward", formatSessionsAsDays(forward))
-                SummaryFigure("Total", formatSessionsAsDays(month + forward))
+                SummaryFigure("This month", formatDays(month))
+                SummaryFigure("Brought forward", formatDays(forward))
+                SummaryFigure("Total", formatDays(month + forward))
             }
             Text(
-                "Present days over ${data.workingTimings / 2} school days in ${monthLabel(data.register.month, data.register.year)}. Each timing counts half a day.",
+                "Present days over ${data.workingDays} school days in ${monthLabel(data.register.month, data.register.year)}.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -199,9 +197,9 @@ private fun MonthStudentRow(data: RegisterData, row: EnrollmentRow, palette: Hea
     val forward = data.broughtForwardOf(id)
     val totals = remember(cells) { heatTotals(cells) }
     val description = "${row.student.name}, roll ${row.enrollment.rollNumber}. " +
-        "${formatSessionsAsDays(month)} days present this month, ${formatSessionsAsDays(forward)} brought forward, " +
-        "${formatSessionsAsDays(month + forward)} total. " +
-        "Absent ${totals[AttendanceStatus.ABSENT] ?: 0} timings, leave ${totals[AttendanceStatus.LEAVE] ?: 0} timings. " +
+        "${formatDays(month)} days present this month, ${formatDays(forward)} brought forward, " +
+        "${formatDays(month + forward)} total. " +
+        "Absent ${totals[AttendanceStatus.ABSENT] ?: 0} days, leave ${totals[AttendanceStatus.LEAVE] ?: 0} days. " +
         "Tap for day by day details."
     Surface(
         shape = CardShape,
@@ -223,7 +221,7 @@ private fun MonthStudentRow(data: RegisterData, row: EnrollmentRow, palette: Hea
                 Spacer(Modifier.width(8.dp))
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        formatSessionsAsDays(month + forward),
+                        formatDays(month + forward),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -236,7 +234,7 @@ private fun MonthStudentRow(data: RegisterData, row: EnrollmentRow, palette: Hea
             }
             HeatStrip(cells, palette)
             Text(
-                "This month ${formatSessionsAsDays(month)} · Brought forward ${formatSessionsAsDays(forward)}",
+                "This month ${formatDays(month)} · Brought forward ${formatDays(forward)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -316,7 +314,7 @@ internal fun AttendanceMonthGrid(data: RegisterData, onOpenStudent: (Long) -> Un
                             cells.forEach { GridCell(it, palette) }
                             listOf(month, forward, month + forward).forEach {
                                 Text(
-                                    formatSessionsAsDays(it),
+                                    formatDays(it),
                                     style = MaterialTheme.typography.labelLarge,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.width(GridTotalWidth),
@@ -334,10 +332,7 @@ internal fun AttendanceMonthGrid(data: RegisterData, onOpenStudent: (Long) -> Un
 private fun GridCell(cell: HeatCell, palette: HeatPalette) {
     Column(Modifier.width(GridCellWidth).padding(horizontal = 1.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         when (cell.kind) {
-            HeatKind.SCHOOL -> {
-                LetterBox(cell.first, palette)
-                LetterBox(cell.second, palette)
-            }
+            HeatKind.SCHOOL -> LetterBox(cell.status, palette, Modifier.heightIn(min = 36.dp))
             HeatKind.OFF_ROLL -> Spacer(Modifier.heightIn(min = 36.dp))
             HeatKind.NO_SCHOOL, HeatKind.HOLIDAY ->
                 Box(Modifier.fillMaxWidth().heightIn(min = 36.dp).background(palette.noSchool, RoundedCornerShape(4.dp)))
@@ -346,10 +341,10 @@ private fun GridCell(cell: HeatCell, palette: HeatPalette) {
 }
 
 @Composable
-private fun LetterBox(status: AttendanceStatus?, palette: HeatPalette) {
+private fun LetterBox(status: AttendanceStatus?, palette: HeatPalette, modifier: Modifier = Modifier) {
     val colors = status?.let { attendanceStatusColors(it) }
     Box(
-        Modifier
+        modifier
             .fillMaxWidth()
             .heightIn(min = 17.dp)
             .background(colors?.container ?: Color.Transparent, RoundedCornerShape(4.dp)),
@@ -367,10 +362,18 @@ private fun LetterBox(status: AttendanceStatus?, palette: HeatPalette) {
 
 // region Student month sheet
 
-/** Day-by-day calendar of one student, with the P / A / L letters spelled out for each timing. */
+/**
+ * Day-by-day calendar of one student, with the P / A / L letter for each day. [onOpenProfile] adds a
+ * "Profile" action that opens the student's (read-only) profile.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun AttendanceStudentMonthSheet(data: RegisterData, row: EnrollmentRow, onDismiss: () -> Unit) {
+internal fun AttendanceStudentMonthSheet(
+    data: RegisterData,
+    row: EnrollmentRow,
+    onDismiss: () -> Unit,
+    onOpenProfile: (() -> Unit)? = null,
+) {
     val cells = remember(data, row.enrollment.id) { heatCells(data, row) }
     val totals = remember(cells) { heatTotals(cells) }
     val offset = mondayOffset(data.register.firstDate)
@@ -384,16 +387,20 @@ internal fun AttendanceStudentMonthSheet(data: RegisterData, row: EnrollmentRow,
         title = row.student.name,
         description = "Roll ${row.enrollment.rollNumber} · ${monthLabel(data.register.month, data.register.year)}",
         onDismiss = onDismiss,
-        footer = { Button(onClick = onDismiss) { Text("Done") } },
+        footer = {
+            if (onOpenProfile != null) TextButton(onClick = onOpenProfile) { Text("Profile") }
+            Spacer(Modifier.weight(1f))
+            Button(onClick = onDismiss) { Text("Done") }
+        },
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            SummaryFigure("This month", formatSessionsAsDays(data.presentSessionsOf(id)))
-            SummaryFigure("Brought forward", formatSessionsAsDays(data.broughtForwardOf(id)))
-            SummaryFigure("Total", formatSessionsAsDays(data.presentSessionsOf(id) + data.broughtForwardOf(id)))
+            SummaryFigure("This month", formatDays(data.presentSessionsOf(id)))
+            SummaryFigure("Brought forward", formatDays(data.broughtForwardOf(id)))
+            SummaryFigure("Total", formatDays(data.presentSessionsOf(id) + data.broughtForwardOf(id)))
         }
         Text(
-            "Timings: present ${totals[AttendanceStatus.PRESENT] ?: 0}, absent ${totals[AttendanceStatus.ABSENT] ?: 0}, " +
-                "leave ${totals[AttendanceStatus.LEAVE] ?: 0}. Each cell shows the 1st and 2nd timing.",
+            "Days: present ${totals[AttendanceStatus.PRESENT] ?: 0}, absent ${totals[AttendanceStatus.ABSENT] ?: 0}, " +
+                "leave ${totals[AttendanceStatus.LEAVE] ?: 0}.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -424,7 +431,7 @@ internal fun AttendanceStudentMonthSheet(data: RegisterData, row: EnrollmentRow,
 private fun CalendarCell(cell: HeatCell, palette: HeatPalette) {
     val description = when (cell.kind) {
         HeatKind.SCHOOL ->
-            "Day ${cell.day}: first timing ${attendanceStatusWord(cell.first)}, second timing ${attendanceStatusWord(cell.second)}"
+            "Day ${cell.day}: ${attendanceStatusWord(cell.status)}"
         HeatKind.HOLIDAY -> "Day ${cell.day}: holiday"
         HeatKind.NO_SCHOOL -> "Day ${cell.day}: weekend"
         HeatKind.OFF_ROLL -> "Day ${cell.day}: not on the roll"
@@ -447,10 +454,7 @@ private fun CalendarCell(cell: HeatCell, palette: HeatPalette) {
             color = if (cell.kind == HeatKind.SCHOOL) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (cell.kind == HeatKind.SCHOOL) {
-            Row(Modifier.padding(horizontal = 2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Box(Modifier.weight(1f)) { LetterBox(cell.first, palette) }
-                Box(Modifier.weight(1f)) { LetterBox(cell.second, palette) }
-            }
+            Box(Modifier.padding(horizontal = 4.dp)) { LetterBox(cell.status, palette) }
         } else {
             Text(
                 if (cell.kind == HeatKind.HOLIDAY) "Hol" else "–",

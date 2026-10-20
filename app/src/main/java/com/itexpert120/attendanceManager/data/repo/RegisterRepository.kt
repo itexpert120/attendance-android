@@ -142,7 +142,7 @@ class RegisterRepository(
         }
     }
 
-    /** Present sessions per enrollment in earlier registers of the same class and academic year. */
+    /** Present days per enrollment in earlier registers of the same class and academic year. */
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeBroughtForward(register: Register): Flow<Map<Long, Int>> =
         combine(db.registers().observeAll(), db.settings().observe()) { registers, settings ->
@@ -180,8 +180,9 @@ class RegisterRepository(
 
     // region Attendance
 
-    /** Sets (or, with a null [status], clears) one student's mark for [day] and [session]. */
-    suspend fun setMark(registerId: Long, enrollmentId: Long, day: Int, session: Session, status: AttendanceStatus?) {
+    /** Sets (or, with a null [status], clears) one student's mark for [day]; attendance is taken once a day. */
+    suspend fun setMark(registerId: Long, enrollmentId: Long, day: Int, status: AttendanceStatus?) {
+        val session = Session.FIRST
         db.withWriteTransaction {
             val register = db.registers().getById(registerId) ?: return@withWriteTransaction
             if (!isAttendanceDateEditable(register, day, today())) return@withWriteTransaction
@@ -202,7 +203,8 @@ class RegisterRepository(
      * Marks every student shown in the attendance grid who was on the roll that day, or clears their
      * marks when [status] is null. Students hidden because they were struck off this month are untouched.
      */
-    suspend fun bulkSetMarks(registerId: Long, day: Int, session: Session, status: AttendanceStatus?) {
+    suspend fun bulkSetMarks(registerId: Long, day: Int, status: AttendanceStatus?) {
+        val session = Session.FIRST
         db.withWriteTransaction {
             val register = db.registers().getById(registerId) ?: return@withWriteTransaction
             if (!isAttendanceDateEditable(register, day, today())) return@withWriteTransaction

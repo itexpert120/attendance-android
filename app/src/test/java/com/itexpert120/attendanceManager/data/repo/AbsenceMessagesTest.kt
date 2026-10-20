@@ -33,20 +33,16 @@ class AbsenceMessagesTest {
     // Tuesday 11 August 2026.
     private val marks = listOf(
         mark(1, 1, 11, Session.FIRST, ABSENT),
-        mark(1, 1, 11, Session.SECOND, ABSENT),
-        mark(1, 2, 11, Session.SECOND, ABSENT),
-        mark(1, 2, 11, Session.FIRST, PRESENT),
+        mark(1, 2, 11, Session.FIRST, ABSENT),
         mark(1, 3, 11, Session.FIRST, PRESENT),
-        mark(1, 3, 11, Session.SECOND, PRESENT),
     )
 
     private fun daily() = attendanceReport(listOf(ali, sara, omar), marks, emptySet(), august, ReportPeriodType.DAILY, 11)
 
     @Test
-    fun `labels the absent timings`() {
-        assertEquals("both timings", absenceSessionLabel(listOf(Session.FIRST, Session.SECOND)))
-        assertEquals("the first timing", absenceSessionLabel(listOf(Session.FIRST)))
-        assertEquals("the second timing", absenceSessionLabel(listOf(Session.SECOND)))
+    fun `an absence covers the whole day`() {
+        assertEquals("the day", ABSENCE_SESSION_LABEL)
+        assertTrue(daily().students.filter { it.absent > 0 }.all { it.absentOnDay })
     }
 
     @Test
@@ -62,7 +58,7 @@ class AbsenceMessagesTest {
 
         assertEquals("Sara", ctx.student)
         assertEquals("Tuesday, August 11, 2026", ctx.date)
-        assertEquals("the second timing", ctx.session)
+        assertEquals("the day", ctx.session)
         assertEquals("Green Valley", ctx.school)
         assertEquals("Class 7, Section B", ctx.className)
         assertEquals("13", ctx.roll)
@@ -74,7 +70,7 @@ class AbsenceMessagesTest {
         val message = absenceMessageRecipients(daily(), group, settings)[0].message
 
         assertEquals(
-            "Dear Parent/Guardian, Ali was marked absent for both timings on Tuesday, August 11, 2026 at Green Valley. " +
+            "Dear Parent/Guardian, Ali was marked absent for the day on Tuesday, August 11, 2026 at Green Valley. " +
                 "Please contact Ms Khan, the class incharge, if this is unexpected.",
             message,
         )
@@ -85,7 +81,7 @@ class AbsenceMessagesTest {
         val custom = settings.copy(absenceMessageTemplate = "{student} (roll {roll}, {class}) absent {session}.")
 
         assertEquals(
-            "Sara (roll 13, Class 7, Section B) absent the second timing.",
+            "Sara (roll 13, Class 7, Section B) absent the day.",
             absenceMessageRecipients(daily(), group, custom)[1].message,
         )
     }

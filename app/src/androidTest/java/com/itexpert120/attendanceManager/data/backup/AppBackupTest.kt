@@ -21,6 +21,7 @@ import com.itexpert120.attendanceManager.model.AttendanceStatus
 import com.itexpert120.attendanceManager.model.FeeAmounts
 import com.itexpert120.attendanceManager.model.InstallmentNumber
 import com.itexpert120.attendanceManager.model.Session
+import com.itexpert120.attendanceManager.model.SubjectTeacher
 import com.itexpert120.attendanceManager.support.FakePhoneNormalizer
 import com.itexpert120.attendanceManager.support.FakePhotoStore
 import com.itexpert120.attendanceManager.support.MutableClock
@@ -130,6 +131,46 @@ class AppBackupTest {
         )
     }
 
+    @Test
+    fun restoresAVersionOneBackupMergingTimingsWithoutSubjectTeachers() = runTest {
+        val data = """
+            {
+              "classGroups":[{"id":1,"className":"7","section":"A","createdAt":0}],
+              "students":[{"id":1,"admissionNumber":"A-001","name":"Ayesha","phone":"","createdAt":0}],
+              "enrollments":[{"id":1,"studentId":1,"classGroupId":1,"rollNumber":"1","admittedOn":"2026-08-01"}],
+              "registers":[{"id":1,"classGroupId":1,"year":2026,"month":8,"createdAt":0}],
+              "attendance":[
+                {"registerId":1,"enrollmentId":1,"day":14,"session":1,"status":"A"},
+                {"registerId":1,"enrollmentId":1,"day":14,"session":2,"status":"P"},
+                {"registerId":1,"enrollmentId":1,"day":17,"session":2,"status":"L"}
+              ]
+            }
+        """.trimIndent()
+        val zip = zipOf(
+            "manifest.json" to """{"format":"${AppBackup.FORMAT_NAME}","version":1,"createdAt":0}""",
+            "data.json" to data,
+            "complete" to "0",
+        )
+
+        val result = AppBackup(target, targetPhotos, clock).restore(ByteArrayInputStream(zip))
+
+        assertEquals(2, result.counts[BackupTables.ATTENDANCE])
+        assertEquals(0, result.counts[BackupTables.SUBJECT_TEACHERS])
+        val marks = target.attendance().getAll().sortedBy { it.day }
+        assertEquals(listOf(14 to AttendanceStatus.PRESENT, 17 to AttendanceStatus.LEAVE), marks.map { it.day to it.status })
+        assertTrue(marks.all { it.session == Session.FIRST })
+        assertTrue(target.subjectTeachers().getAll().isEmpty())
+    }
+
+    @Test
+    fun exportWritesTheCurrentVersionWithSubjectTeachersAndOneTimingPerDay() = runTest {
+        val summary = AppBackup(source, sourcePhotos, clock).inspect(ByteArrayInputStream(export()))
+        assertEquals(1, summary.counts[BackupTables.SUBJECT_TEACHERS])
+        assertEquals(2, summary.counts[BackupTables.ATTENDANCE])
+        assertTrue(source.attendance().getAll().all { it.session == Session.FIRST })
+        assertEquals(2, AppBackup.FORMAT_VERSION)
+    }
+
     private suspend fun export(): ByteArray {
         val out = ByteArrayOutputStream()
         AppBackup(source, sourcePhotos, clock).export(out)
@@ -171,6 +212,7 @@ class AppBackupTest {
             db.fees().getAllMeta().rows(),
             db.fees().getAllRemarks().rows(),
             db.subjects().getAll().rows(),
+            db.subjectTeachers().getAll().rows(),
             db.tests().getAll().rows(),
             db.tests().getAllRosterEntries().rows(),
             db.homework().getAllReports().map { it.copy(photoFile = content(it.photoFile)) }.rows(),
@@ -209,8 +251,8 @@ class AppBackupTest {
 
         val registers = RegisterRepository(db, clock, TimeZone.UTC)
         val registerId = registers.createRegister(classId, 2026, 8).id
-        registers.setMark(registerId, ayesha, 14, Session.FIRST, AttendanceStatus.PRESENT)
-        registers.setMark(registerId, bilal, 14, Session.SECOND, AttendanceStatus.LEAVE)
+        registers.setMark(registerId, ayesha, 14, AttendanceStatus.PRESENT)
+        registers.setMark(registerId, bilal, 14, AttendanceStatus.LEAVE)
         registers.toggleHoliday(registerId, 13, "Founders' Day")
         registers.saveFeeEntries(registerId, ayesha, listOf(InstallmentFees(InstallmentNumber.FIRST, FeeAmounts(ftf = 10000, ff = 500))))
         registers.saveInstallmentMeta(registerId, InstallmentNumber.FIRST, 50000, "Mr Khan")
@@ -219,6 +261,7 @@ class AppBackupTest {
         val subjects = SubjectRepository(db, clock)
         val maths = subjects.saveSubject("Maths").id
         subjects.archiveSubject(subjects.saveSubject("Art").id)
+        db.subjectTeachers().upsert(SubjectTeacher(classId, maths, "Mr Ali"))
 
         val tests = TestRepository(db, clock)
         val testId = tests.createTest(TestInput("Unit 1", maths, classId, LocalDate(2026, 8, 14), 4000)).id
