@@ -133,6 +133,12 @@ fun PdfExportSheet(state: PdfExportState) {
             }
             is ExportPhase.Failed -> ErrorBanner(p.message)
             is ExportPhase.Ready -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PdfPreviewStrip(
+                    file = p.file,
+                    pages = p.pages,
+                    landscape = p.orientation == PageOrientation.LANDSCAPE,
+                    title = request.title,
+                )
                 ListGroup {
                     item {
                         ListRow(
