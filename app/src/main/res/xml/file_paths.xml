@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Camera captures; the camera app writes here and PhotoProcessor reads it back. -->
+    <cache-path name="camera" path="camera/" />
+    <!-- Generated PDFs and exports handed to the share sheet or print. -->
+    <cache-path name="exports" path="exports/" />
+</paths>

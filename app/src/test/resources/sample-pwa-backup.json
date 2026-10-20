@@ -1,0 +1,116 @@
+{
+  "formatName": "dexie",
+  "formatVersion": 1,
+  "data": {
+    "databaseName": "students-attendance-register",
+    "databaseVersion": 10,
+    "tables": [
+      { "name": "settings", "schema": "id", "rowCount": -1 },
+      { "name": "classGroups", "schema": "id,[className+section],createdAt", "rowCount": -1 },
+      { "name": "students", "schema": "id,&admissionNumber,name,phone", "rowCount": -1 },
+      { "name": "enrollments", "schema": "id,studentId,classGroupId,[classGroupId+rollNumber],admittedOn,struckOffOn", "rowCount": -1 },
+      { "name": "registers", "schema": "id,classGroupId,[classGroupId+year+month],year,month,createdAt", "rowCount": -1 },
+      { "name": "attendance", "schema": "id,registerId,enrollmentId,[registerId+enrollmentId],[registerId+day]", "rowCount": -1 }
+    ],
+    "data": [
+      {
+        "tableName": "settings",
+        "inbound": true,
+        "rows": [
+          {
+            "id": "school",
+            "schoolName": "Sample School",
+            "academicYearStartMonth": 4,
+            "currencyLabel": "Rs.",
+            "headmasterName": "Mr Head",
+            "updatedAt": "2025-04-01T08:00:00.000Z"
+          }
+        ]
+      },
+      {
+        "tableName": "classGroups",
+        "inbound": true,
+        "rows": [
+          { "id": "7a1f0c52-0000-4000-8000-000000000001", "className": "5", "section": "A", "createdAt": "2025-04-01T08:00:00.000Z" }
+        ]
+      },
+      {
+        "tableName": "students",
+        "inbound": true,
+        "rows": [
+          {
+            "id": "7a1f0c52-0000-4000-8000-0000000000a1",
+            "admissionNumber": "101",
+            "name": "Sara Ahmed",
+            "phone": "+923001234567",
+            "dateOfBirth": "2015-03-09",
+            "photoDataUrl": "data:image/png;base64,dGVzdA==",
+            "createdAt": "2025-04-01T08:00:00.000Z"
+          },
+          {
+            "id": "7a1f0c52-0000-4000-8000-0000000000a2",
+            "admissionNumber": "102",
+            "name": "Omar Raza",
+            "phone": "",
+            "createdAt": "2025-04-01T08:00:00.000Z"
+          }
+        ]
+      },
+      {
+        "tableName": "enrollments",
+        "inbound": true,
+        "rows": [
+          {
+            "id": "7a1f0c52-0000-4000-8000-0000000000e1",
+            "studentId": "7a1f0c52-0000-4000-8000-0000000000a1",
+            "classGroupId": "7a1f0c52-0000-4000-8000-000000000001",
+            "rollNumber": "1",
+            "admittedOn": "2025-04-01"
+          },
+          {
+            "id": "7a1f0c52-0000-4000-8000-0000000000e2",
+            "studentId": "7a1f0c52-0000-4000-8000-0000000000a2",
+            "classGroupId": "7a1f0c52-0000-4000-8000-000000000001",
+            "rollNumber": "2",
+            "admittedOn": "2025-04-01"
+          }
+        ]
+      },
+      {
+        "tableName": "registers",
+        "inbound": true,
+        "rows": [
+          {
+            "id": "7a1f0c52-0000-4000-8000-0000000000r1",
+            "classGroupId": "7a1f0c52-0000-4000-8000-000000000001",
+            "year": 2025,
+            "month": 4,
+            "createdAt": "2025-04-01T08:00:00.000Z"
+          }
+        ]
+      },
+      {
+        "tableName": "attendance",
+        "inbound": true,
+        "rows": [
+          {
+            "id": "7a1f0c52-0000-4000-8000-0000000000r1:7a1f0c52-0000-4000-8000-0000000000e1:2:1",
+            "registerId": "7a1f0c52-0000-4000-8000-0000000000r1",
+            "enrollmentId": "7a1f0c52-0000-4000-8000-0000000000e1",
+            "day": 2,
+            "session": 1,
+            "status": "P"
+          },
+          {
+            "id": "7a1f0c52-0000-4000-8000-0000000000r1:7a1f0c52-0000-4000-8000-0000000000e2:2:1",
+            "registerId": "7a1f0c52-0000-4000-8000-0000000000r1",
+            "enrollmentId": "7a1f0c52-0000-4000-8000-0000000000e2",
+            "day": 2,
+            "session": 1,
+            "status": "A"
+          }
+        ]
+      }
+    ]
+  }
+}

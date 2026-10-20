@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Android Auto Backup for Android 11 and lower (API 31+ uses data_extraction_rules.xml).
+   Backs up the school database and the photo files it references; the cache (camera captures,
+   generated PDFs and exports) is never backed up by the system.
+   See https://developer.android.com/guide/topics/data/autobackup
+-->
+<full-backup-content>
+    <!-- Room database (attendance.db) with its WAL and journal files. -->
+    <include domain="database" path="." />
+    <!-- FilePhotoStore: files/photos (student photos, school logo, homework diary pages). -->
+    <include domain="file" path="photos/" />
+    <!-- Per-device UI preferences such as the theme. -->
+    <include domain="sharedpref" path="." />
+</full-backup-content>

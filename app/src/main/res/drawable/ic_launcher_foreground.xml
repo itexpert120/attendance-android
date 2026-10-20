@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The web app's mark (public/favicon.svg): a graduation cap. The 512-unit artwork is scaled into the
+    adaptive icon's 108dp canvas so it sits inside the 66dp safe zone that every launcher mask keeps.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.1564"
+        android:scaleY="0.1564"
+        android:translateX="13.8"
+        android:translateY="16.0">
+        <!-- Cap board -->
+        <path
+            android:fillColor="#F3F5ED"
+            android:pathData="M78,197 L256,96 L434,197 L256,298 Z" />
+        <!-- Cap base -->
+        <path
+            android:fillColor="#DCEFE0"
+            android:pathData="M145,251 L145,362 C213,419 299,419 367,362 L367,251 L256,314 Z" />
+        <!-- Tassel cord -->
+        <path
+            android:pathData="M417,222 L417,350"
+            android:strokeWidth="28"
+            android:strokeColor="#F3F5ED"
+            android:strokeLineCap="round" />
+        <!-- Tassel -->
+        <path
+            android:fillColor="#F3F5ED"
+            android:pathData="M398,371 A19,19 0 1,0 436,371 A19,19 0 1,0 398,371 Z" />
+    </group>
+</vector>
