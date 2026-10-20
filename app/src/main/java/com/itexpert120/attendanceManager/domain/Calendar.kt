@@ -7,8 +7,8 @@ import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.number
 
-/** Every school day has a morning and an afternoon timing, and each is marked separately. */
-const val SESSIONS_PER_DAY = 2
+/** Attendance is taken once per school day, so one session is one day. */
+const val SESSIONS_PER_DAY = 1
 
 /** How many days an attendance entry stays editable: today and the seven days before it. */
 const val ATTENDANCE_EDIT_WINDOW_DAYS = 7

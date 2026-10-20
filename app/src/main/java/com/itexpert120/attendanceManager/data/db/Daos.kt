@@ -22,6 +22,7 @@ import com.itexpert120.attendanceManager.model.Session
 import com.itexpert120.attendanceManager.model.Student
 import com.itexpert120.attendanceManager.model.StudentRemark
 import com.itexpert120.attendanceManager.model.Subject
+import com.itexpert120.attendanceManager.model.SubjectTeacher
 import com.itexpert120.attendanceManager.model.TestRecord
 import com.itexpert120.attendanceManager.model.TestRosterEntry
 import kotlinx.coroutines.flow.Flow
@@ -361,6 +362,25 @@ interface SubjectDao {
 
     @Update
     suspend fun update(subject: Subject)
+}
+
+@Dao
+interface SubjectTeacherDao {
+    @Query("SELECT * FROM subject_teachers")
+    fun observeAll(): Flow<List<SubjectTeacher>>
+
+    @Query("SELECT * FROM subject_teachers")
+    suspend fun getAll(): List<SubjectTeacher>
+
+    @Upsert
+    suspend fun upsert(teacher: SubjectTeacher)
+
+    @Query("DELETE FROM subject_teachers WHERE classGroupId = :classGroupId AND subjectId = :subjectId")
+    suspend fun delete(classGroupId: Long, subjectId: Long)
+
+    /** Backup restore: rows keep their keys. */
+    @Insert
+    suspend fun insertAll(teachers: List<SubjectTeacher>)
 }
 
 @Dao

@@ -7,9 +7,28 @@ import com.itexpert120.attendanceManager.model.Register
 import com.itexpert120.attendanceManager.model.Session
 
 /*
- * Attendance is counted in whole sessions. One session is half a school day, which is what the PWA
- * stored as 0.5; counting integers keeps totals exact. Use [sessionsToDays] when showing a day count.
+ * Attendance is counted in whole sessions. Attendance is now taken once a day, so a session is a day;
+ * [sessionsToDays] stays as the single place that converts counts for display.
  */
+
+/**
+ * Collapses two-timing data (old databases, native backups, PWA imports) to one mark per student and day,
+ * stored as [Session.FIRST]: Present if either timing was Present, else Leave if either was Leave, else Absent.
+ * Mirrors the SQL in the database's 1 -> 2 migration.
+ */
+fun mergeTimings(marks: List<AttendanceMark>): List<AttendanceMark> {
+    if (marks.none { it.session != Session.FIRST }) return marks
+    return marks
+        .groupBy { Triple(it.registerId, it.enrollmentId, it.day) }
+        .map { (_, cell) ->
+            val status = when {
+                cell.any { it.status == AttendanceStatus.PRESENT } -> AttendanceStatus.PRESENT
+                cell.any { it.status == AttendanceStatus.LEAVE } -> AttendanceStatus.LEAVE
+                else -> AttendanceStatus.ABSENT
+            }
+            cell.first().copy(session = Session.FIRST, status = status)
+        }
+}
 
 fun sessionsToDays(sessions: Int): Double = sessions.toDouble() / SESSIONS_PER_DAY
 

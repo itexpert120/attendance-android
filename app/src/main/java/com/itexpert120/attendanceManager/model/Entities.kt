@@ -36,7 +36,10 @@ enum class AttendanceStatus(val code: String) {
     }
 }
 
-/** One half of a school day; the register records attendance per session ("timing"). */
+/**
+ * The register's timing. Attendance is taken once a day, always as [FIRST]; [SECOND] only survives in the
+ * schema so old backups can be read, and every import merges it into [FIRST] (see `mergeTimings`).
+ */
 enum class Session(val number: Int) {
     FIRST(1),
     SECOND(2);
@@ -92,6 +95,7 @@ data class ClassGroup(
 )
 data class Student(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** The student's B-Form (NADRA child registration) number; the column keeps its original name. */
     @ColumnInfo(collate = ColumnInfo.NOCASE) val admissionNumber: String,
     val name: String,
     /** E.164 once normalised, or empty when the student has no phone number. */
@@ -305,6 +309,22 @@ data class TestRosterEntry(
     val marks: Int? = null,
     val resultUpdatedAt: Instant? = null,
     val createdAt: Instant,
+)
+
+/** Who teaches one Subject in one Class Group; the Teacher Performance report groups results by this name. */
+@Entity(
+    tableName = "subject_teachers",
+    primaryKeys = ["classGroupId", "subjectId"],
+    foreignKeys = [
+        ForeignKey(ClassGroup::class, parentColumns = ["id"], childColumns = ["classGroupId"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(Subject::class, parentColumns = ["id"], childColumns = ["subjectId"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("subjectId")],
+)
+data class SubjectTeacher(
+    val classGroupId: Long,
+    val subjectId: Long,
+    val teacherName: String,
 )
 
 @Entity(
