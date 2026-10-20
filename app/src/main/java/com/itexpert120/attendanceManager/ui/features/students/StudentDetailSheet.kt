@@ -73,18 +73,21 @@ fun StudentDetailSheet(
         description = studentSummaryLine(row),
         onDismiss = onDismiss,
         modifier = modifier,
-        footer = {
-            if (struckOff == null) {
-                if (onStrikeOff != null) {
-                    TextButton(onClick = onStrikeOff) { Text("Strike off", color = MaterialTheme.colorScheme.error) }
+        // Read-only (from the register): no actions, so no footer bar either.
+        footer = if (onEdit == null && onStrikeOff == null && onRestore == null) null else {
+            {
+                if (struckOff == null) {
+                    if (onStrikeOff != null) {
+                        TextButton(onClick = onStrikeOff) { Text("Strike off", color = MaterialTheme.colorScheme.error) }
+                    }
+                } else if (onRestore != null) {
+                    TextButton(onClick = onRestore) { Text("Put back on roll") }
                 }
-            } else if (onRestore != null) {
-                TextButton(onClick = onRestore) { Text("Put back on roll") }
-            }
-            if (onEdit != null) {
-                Button(onClick = onEdit) {
-                    Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("Edit")
+                if (onEdit != null) {
+                    Button(onClick = onEdit) {
+                        Icon(Icons.Rounded.Edit, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                        Text("Edit")
+                    }
                 }
             }
         },

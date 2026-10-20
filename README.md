@@ -12,7 +12,7 @@ Android 7.0 or newer is required.
 ## Moving from the web app
 
 1. In the web app, open **Settings → Back up data** and save the backup (`.json` file).
-2. Install the Android app and open **Settings → Import from web app**, then pick that file.
+2. Install the Android app and open **Settings → Import from web app backup**, then pick that file.
 
 Students, classes, registers, fees, tests, subjects and homework all come across.
 
