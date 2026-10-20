@@ -136,6 +136,21 @@ fun subjectReportPeriod(type: ReportPeriodType, anchor: LocalDate?): SubjectRepo
     }
 }
 
+/**
+ * A custom report range: "1 Sep – 15 Oct 2026", "20 Dec 2025 – 5 Jan 2026" across years, or "1 Sep 2026" for a
+ * single day. [start] and [end] may come in either order.
+ */
+fun dateRangeLabel(start: LocalDate, end: LocalDate): String {
+    val from = minOf(start, end)
+    val to = maxOf(start, end)
+    fun dayMonth(date: LocalDate) = "${date.day} ${shortMonthName(date.month.number)}"
+    return when {
+        from == to -> "${dayMonth(from)} ${from.year}"
+        from.year == to.year -> "${dayMonth(from)} – ${dayMonth(to)} ${to.year}"
+        else -> "${dayMonth(from)} ${from.year} – ${dayMonth(to)} ${to.year}"
+    }
+}
+
 /** "Wednesday, 2 September 2026" */
 private fun gbLongDate(date: LocalDate) =
     "${weekdayName(date)}, ${date.day} ${monthName(date.month.number)} ${date.year}"

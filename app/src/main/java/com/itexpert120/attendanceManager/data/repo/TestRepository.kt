@@ -2,7 +2,10 @@ package com.itexpert120.attendanceManager.data.repo
 
 import androidx.room3.withWriteTransaction
 import com.itexpert120.attendanceManager.data.db.AttendanceDatabase
+import com.itexpert120.attendanceManager.domain.AssessmentData
 import com.itexpert120.attendanceManager.domain.DateRange
+import com.itexpert120.attendanceManager.model.ClassGroup
+import com.itexpert120.attendanceManager.model.SubjectTeacher
 import com.itexpert120.attendanceManager.domain.TestAggregate
 import com.itexpert120.attendanceManager.domain.TestSummary
 import com.itexpert120.attendanceManager.domain.ValidationException
@@ -179,6 +182,34 @@ class TestRepository(
             buildTestReport(filter, tests, entries, subjects, enrollmentIds)
         }
     }
+
+    /**
+     * The Tests dated within [range] with their roster entries, plus every enrollment, Subject, Class Group and
+     * teacher assignment: the snapshot the report card, teacher and class assessment reports are computed from.
+     */
+    fun observeAssessmentData(range: DateRange): Flow<AssessmentData> {
+        val results = combine(db.tests().observeAll(), db.tests().observeAllRosterEntries()) { tests, entries ->
+            val inRange = tests.filter { it.date in range }
+            val ids = inRange.mapTo(HashSet()) { it.id }
+            inRange to entries.filter { it.testId in ids }
+        }
+        val lookups = combine(
+            db.enrollments().observeAllRows(),
+            db.subjects().observeAll(),
+            db.classGroups().observeAll(),
+            db.subjectTeachers().observeAll(),
+        ) { enrollments, subjects, classes, teachers -> AssessmentLookups(enrollments, subjects, classes, teachers) }
+        return combine(results, lookups) { (tests, entries), l ->
+            AssessmentData(range, tests, entries, l.enrollments, l.subjects, l.classes, l.teachers)
+        }
+    }
+
+    private data class AssessmentLookups(
+        val enrollments: List<EnrollmentRow>,
+        val subjects: List<Subject>,
+        val classes: List<ClassGroup>,
+        val teachers: List<SubjectTeacher>,
+    )
 
     suspend fun getTest(testId: Long): TestRecord? = db.tests().getById(testId)
 
