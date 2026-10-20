@@ -25,6 +25,9 @@ class AutoBackupWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val container = (applicationContext as AttendanceApplication).container
         val preferences = container.autoBackupPreferences
         return try {
+            // Before setup (a fresh install, or after "Clear data") there is nothing to keep, and an empty
+            // backup would rotate away the good ones, so the run is skipped.
+            if (container.settings.getSettings() == null) return Result.success()
             val now = Clock.System.now()
             val storage = AutoBackupStorage.create(applicationContext)
             val name = autoBackupFileName(now.toLocalDateTime(TimeZone.currentSystemDefault()))
